@@ -9,6 +9,7 @@
 #include "Adafruit_GFX.h"
 #include "RTClib.h"
 #include "AT24Cxx.h"
+#include <ClickEncoder.h>
 
 
 // 2013-04-06 TODO:  Add a temperature sensor to the lamp and if it exceeds a particular temperature, then turn it off or down
@@ -44,6 +45,20 @@ struct ClockTime {
   ClockTime operator++(int) {
     ClockTime result(*this);
     ++this->minute;
+    fixTime();
+    return result;
+  }
+  ClockTime operator+=(int16_t delta)
+  {
+    ClockTime result(*this);
+    this->minute += delta;
+    fixTime();
+    return result;
+  }
+  ClockTime operator-=(int16_t delta)
+  {
+    ClockTime result(*this);
+    this->minute -= delta;
     fixTime();
     return result;
   }
@@ -153,13 +168,20 @@ bool operator!=(ClockTime lhs, ClockTime rhs) {
   return !(lhs == rhs);
 }
 
-const int LEDpinA = 9;
+ClickEncoder *encoder;
+const int ENCODER_PIN0 = 11;
+const int ENCODER_PIN1 = 12;
 
-const int AlarmButton = 2;
-const int TimeButton = 3;
-const int FwdButton = 4;
-const int RewButton = 5;
-const int OffButton = 6;
+const int LEDpinA = 6;
+
+const int AlarmButton = 7;
+const int AlarmLED = 8;
+const int TimeButton = 9;
+const int TimeLED = 13;
+const int FwdButton = 2; // rotary encoder
+const int RewButton = 3; // rotary encoder
+const int OffButton = A0;
+const int AlarmEnabledButton = 5;
 
 bool alarmEnabled = true;
 bool alarmActive = false;
@@ -178,8 +200,8 @@ const unsigned long modeInactivePeriod = 30000; // 30 seconds
 
 AT24Cxx eeprom;
 // This is the time you want to get up.  Lights will start 30 minutes before.
-ClockTime alarmTime(5,00); 
-ClockTime startTime(4,30);
+ClockTime alarmTime(6,00); 
+ClockTime startTime(5,30);
 
 const int alarm_address = 0;
 const int sundown_address = 2;
@@ -203,6 +225,11 @@ RTC_DS1307 RTC;
 unsigned long synchronized_clock_millis;
 ClockTime synchronized_clock_time;
 ClockTime current_clock_time;
+
+void timerIsr() {
+  encoder->service();
+}
+
 
 bool readAlarmTimeFromEEPROM() {
   if (eeprom.isPresent()) {
@@ -476,23 +503,23 @@ void setup() {
   //          )
   //);
   pinMode(LEDpinA,OUTPUT); digitalWrite(LEDpinA,0);
-  pinMode(AlarmButton,INPUT); 
-  pinMode(TimeButton,INPUT);
+  pinMode(AlarmButton,INPUT_PULLUP); 
+  pinMode(TimeButton,INPUT_PULLUP);
   pinMode(RewButton,INPUT); 
   pinMode(FwdButton,INPUT); 
   pinMode(OffButton,INPUT);
+  encoder = new ClickEncoder(ENCODER_PIN0, ENCODER_PIN1);
   timer.initialize(timerPeriod);
   timer.pwm(LEDpinA, 0); //set up pin 9
   matrix.begin(0x70);
   display_todd();
+  //while (!eeprom.isPresent()) { delay(1); }
   readBrightnessFromEEPROM();
   matrix.setBrightness(matrixBrightness); // 0-15
   readSunDownDeltaFromEEPROM();
   updateClockTime(true);
   updateCurrentTime(true);
-  if (!readAlarmTimeFromEEPROM()) {    
-    alarmTime = ClockTime(5,45);
-  }
+  readAlarmTimeFromEEPROM();
   updateStartTime();
 }
 
@@ -555,56 +582,19 @@ void updateLight() {
 }
 
 
-void forwardTime(ClockTime & t) {
-  while (digitalRead(FwdButton)==LOW) {
-    ++t.minute;
-    if (t.minute > 59) {
-      ++t.hour;
-      t.minute = 0;
-    }
-    if (t.hour > 23) {
-      t.hour = 0;
-    }
-    updateTimeDisplay(t,true,true);
-    delay(forward_delay);
-  }
+void updateTime(ClockTime & t, int16_t delta) {
+  t.minute += delta;
+  updateTimeDisplay(t,true,true);
 }
 
-void rewindTime(ClockTime & t) {
-  while (digitalRead(RewButton)==LOW) {
-    --t.minute;
-    if (t.minute < 0) {
-      --t.hour;
-      t.minute = 59;
-    }
-    if (t.hour < 0) {
-      t.hour = 23;
-    }
-    updateTimeDisplay(t,true,true);
-    delay(rewind_delay);
-  }
-
+void updateAlarm(int16_t delta) {
+  alarmTime += delta;
+  updateTimeDisplay(alarmTime,true,true);
 }
-
-void forwardAlarm() {
-  while (digitalRead(FwdButton)==LOW) {
-    ++alarmTime;
-    updateTimeDisplay(alarmTime,true,true);
-    delay(forward_delay);
-  }
-}
-
-void rewindAlarm() {
- while (digitalRead(RewButton)==LOW) {
-    --alarmTime;
-    updateTimeDisplay(alarmTime,true,true);
-    delay(rewind_delay);
-  }
-}
-
 
 
 void setTime() {
+  digitalWrite(TimeLED,HIGH);
   DateTime currentTime = RTC.now();
   ClockTime t(currentTime);
   display_Cloc();
@@ -614,13 +604,9 @@ void setTime() {
   unsigned long modeActive = millis();
   bool normalExit = true;
   while (debounceDigitalRead(TimeButton)==HIGH) {
-    if (digitalRead(FwdButton)==LOW) {
-      forwardTime(t);
-      modeActive = millis();
-    } else if (digitalRead(RewButton)==LOW) {
-      rewindTime(t);
-      modeActive = millis();
-    }
+    int16_t encoderDelta = encoder->getValue();
+    updateTime(t,encoderDelta);
+    modeActive = millis();
     if (static_cast<unsigned long>(millis() - modeActive) > modeInactivePeriod) {
       normalExit = false;
       break;
@@ -645,9 +631,11 @@ void setTime() {
   synchronized_clock_millis = millis();
   current_clock_time = synchronized_clock_time;
   updateCurrentTime(true);
+  digitalWrite(TimeLED,LOW);
 }
 
 void setAlarm() {
+  digitalWrite(AlarmLED,HIGH);
   display_ALAr();
   delay(1000);
   updateTimeDisplay(alarmTime,true,true);
@@ -655,13 +643,9 @@ void setAlarm() {
   unsigned long modeActive = millis();
   bool normalExit = true;
   while (debounceDigitalRead(AlarmButton)==HIGH) {
-    if (digitalRead(FwdButton)==LOW) {
-      forwardAlarm();
-      modeActive = millis();
-    } else if (digitalRead(RewButton)==LOW) {
-      rewindAlarm();
-      modeActive = millis();
-    }
+    int16_t encoderDelta = encoder->getValue();
+    updateAlarm(encoderDelta);
+    modeActive = millis();
     if (static_cast<unsigned long>(millis() - modeActive) > modeInactivePeriod) {
       normalExit = false;
       break;
@@ -676,6 +660,7 @@ void setAlarm() {
   updateCurrentTime(true);
   updateTimeDisplay(current_clock_time,false,false);
   writeAlarmTimeToEEPROM();
+  digitalWrite(AlarmLED,LOW);
 }
 
 void forwardSunSet(int & minutes) {
@@ -775,7 +760,7 @@ void loop() {
   else if (digitalRead(TimeButton)==LOW && debounceDigitalRead(TimeButton)==LOW) {
     setTime();
   } 
-  else if (digitalRead(OffButton)==LOW && debounceDigitalRead(OffButton)==LOW) {
+  else if (digitalRead(OffButton)==HIGH && debounceDigitalRead(OffButton)==HIGH) {
     if (alarmActive) {
       alarmActive = false;
       alarmEnabled = false;
@@ -791,18 +776,14 @@ void loop() {
       setSunSet();
     }
   } 
-  else if (digitalRead(FwdButton)==LOW && debounceDigitalRead(FwdButton)==LOW) {
-    matrixBrightness = max(min(15,matrixBrightness+1),0); 
+  int16_t encoderDelta = encoder->getValue();
+  if (encoderDelta != 0) 
+  {
+    int delta = (encoderDelta>0 ? 1 : -1);
+    matrixBrightness = max(min(15,matrixBrightness+delta),0); 
     matrix.setBrightness(matrixBrightness); // 0-15
-    waitForButtonDepress(FwdButton);
     writeBrightnessToEEPROM();
-  } 
-  else if (digitalRead(RewButton)==LOW && debounceDigitalRead(RewButton)==LOW) {
-    matrixBrightness = max(min(15,matrixBrightness-1),0); 
-    matrix.setBrightness(matrixBrightness); // 0-15
-    waitForButtonDepress(RewButton);
-    writeBrightnessToEEPROM();
-  }
+  }  
   updateLight();
   updateCurrentTime();
   updateClockTime();
