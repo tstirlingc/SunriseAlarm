@@ -169,27 +169,25 @@ bool operator!=(ClockTime lhs, ClockTime rhs) {
 }
 
 ClickEncoder *encoder;
-const int ENCODER_PIN0 = 11;
-const int ENCODER_PIN1 = 12;
+#define ENCODER_PIN0 11
+#define ENCODER_PIN1 12
 
-const int LEDpinA = 6;
+//const int LEDpinA = 6;
 
 const int AlarmButton = 7;
 const int AlarmLED = 8;
 const int TimeButton = 9;
 const int TimeLED = 13;
-const int FwdButton = 2; // rotary encoder
-const int RewButton = 3; // rotary encoder
 const int OffButton = A0;
 const int AlarmEnabledButton = 5;
 
 bool alarmEnabled = true;
 bool alarmActive = false;
 
-TimerOne timer;
+//TimerOne timer;
 const int16_t maxBright = 1024; // resolution of TimerOne::pwm (10 bits)
 const int thirtyminutes = 1800; // 1800 seconds = 30 minutes
-const int timerPeriod = 1000; // 1000us = 1 kHz flicker
+//const int timerPeriod = 1000; // 1000us = 1 kHz flicker
 const int16_t maxTime = 3600; // 1.0 hours
 const int forward_delay = 15;
 const int rewind_delay = 150;
@@ -312,18 +310,18 @@ int debounceDigitalRead(int pin) {
 
 void turnLightOn(int currentLevel) {
   for (int i=currentLevel ; i < maxBright ; ++i) {
-    timer.pwm(LEDpinA,i);
-    delay(1);
+    //timer.pwm(LEDpinA,i);
+    //delay(1);
   }
-  digitalWrite(LEDpinA,HIGH);
+  //digitalWrite(LEDpinA,HIGH);
 }
 
 void turnLightOff(int currentLevel) {
   for (int i=currentLevel ; i>0 ; --i) {
-    timer.pwm(LEDpinA,i);
-    delay(1);
+    //timer.pwm(LEDpinA,i);
+    //delay(1);
   }
-  digitalWrite(LEDpinA,LOW);
+  //digitalWrite(LEDpinA,LOW);
 }
 
 void waitForButtonDepress(int pin) {
@@ -386,7 +384,7 @@ int32_t linearBright(int32_t level) {
   //Serial.print("linearLevel = ");
   //Serial.println(linearLevel);
   lastAlarmLightLevel = linearLevel;
-  timer.pwm(LEDpinA,lastAlarmLightLevel);
+  //timer.pwm(LEDpinA,lastAlarmLightLevel);
   return linearLevel;
 }
 
@@ -502,15 +500,17 @@ void setup() {
   //            50
   //          )
   //);
-  pinMode(LEDpinA,OUTPUT); digitalWrite(LEDpinA,0);
+  //pinMode(LEDpinA,OUTPUT); digitalWrite(LEDpinA,0);
   pinMode(AlarmButton,INPUT_PULLUP); 
   pinMode(TimeButton,INPUT_PULLUP);
-  pinMode(RewButton,INPUT); 
-  pinMode(FwdButton,INPUT); 
   pinMode(OffButton,INPUT);
-  encoder = new ClickEncoder(ENCODER_PIN0, ENCODER_PIN1);
-  timer.initialize(timerPeriod);
-  timer.pwm(LEDpinA, 0); //set up pin 9
+  pinMode(AlarmLED, OUTPUT);
+  pinMode(TimeLED, OUTPUT);
+  encoder = new ClickEncoder(ENCODER_PIN0, ENCODER_PIN1, -1, 4);
+  Timer1.initialize(1000);
+  Timer1.attachInterrupt(timerIsr); 
+  //timer.initialize(timerPeriod);
+  //timer.pwm(LEDpinA, 0); //set up pin 9
   matrix.begin(0x70);
   display_todd();
   //while (!eeprom.isPresent()) { delay(1); }
@@ -574,7 +574,7 @@ void updateLight() {
   if (seconds >= thirtyminutes) {
     //Serial.println("past alarm time but still in alarm zone turning light on full and returning");
     lastAlarmLightLevel = maxLightLevel;
-    digitalWrite(LEDpinA,HIGH);
+    //digitalWrite(LEDpinA,HIGH);
     return;
   }
   //Serial.println("in alarm zone during ramp-up, calling linearBright");
@@ -664,27 +664,27 @@ void setAlarm() {
 }
 
 void forwardSunSet(int & minutes) {
-  while (digitalRead(FwdButton)==LOW) {
-    ++minutes;
-    matrix.print(minutes);
-    matrix.writeDisplay();
-    delay(forward_delay);
-  }
+//  while (digitalRead(FwdButton)==LOW) {
+//    ++minutes;
+//    matrix.print(minutes);
+//    matrix.writeDisplay();
+//    delay(forward_delay);
+//  }
 }
 
 void rewindSunSet(int & minutes) {
- while (digitalRead(RewButton)==LOW) {
-    --minutes;
-    if (minutes < 0) {
-      minutes = 0;
-    }
-    matrix.print(minutes);
-    if (minutes == 0) {
-      matrix.writeDigitNum(4,0);
-    }
-    matrix.writeDisplay();
-    delay(rewind_delay);
-  }
+// while (digitalRead(RewButton)==LOW) {
+//    --minutes;
+//    if (minutes < 0) {
+//      minutes = 0;
+//    }
+//    matrix.print(minutes);
+//    if (minutes == 0) {
+//      matrix.writeDigitNum(4,0);
+//    }
+//    matrix.writeDisplay();
+//    delay(rewind_delay);
+//  }
 }
 
 
@@ -702,14 +702,14 @@ void setSunSet() {
   unsigned long modeActive = millis();
   bool normalExit = true;
   while (debounceDigitalRead(OffButton)==HIGH) {
-    if (digitalRead(FwdButton)==LOW) {
-      forwardSunSet(defaultSunSetDelta);
-      modeActive = millis();
-    } 
-    else if (digitalRead(RewButton)==LOW) {
-      rewindSunSet(defaultSunSetDelta);
-      modeActive = millis();
-    }
+//    if (digitalRead(FwdButton)==LOW) {
+//      forwardSunSet(defaultSunSetDelta);
+//      modeActive = millis();
+//    } 
+//    else if (digitalRead(RewButton)==LOW) {
+//      rewindSunSet(defaultSunSetDelta);
+//      modeActive = millis();
+//    }
     if (static_cast<unsigned long>(millis() - modeActive) > modeInactivePeriod) {
       normalExit = false;
       break;
@@ -744,7 +744,7 @@ void updateSunSet() {
   finalMillis *= 1000;
   if (delta > finalMillis) {
     sunSetActive = false;
-    digitalWrite(LEDpinA,0);
+    //digitalWrite(LEDpinA,0);
   }
   else {
     double temp = -(1800.0*delta)/(finalMillis*1.0) + 1800.0;
@@ -752,6 +752,17 @@ void updateSunSet() {
   }
 }
 
+void updateBrightness()
+{
+  int16_t encoderDelta = encoder->getValue();
+  if (encoderDelta != 0) 
+  {
+    int delta = (encoderDelta>0 ? 1 : -1);
+    matrixBrightness = max(min(15,matrixBrightness+delta),0); 
+    matrix.setBrightness(matrixBrightness); // 0-15
+    //writeBrightnessToEEPROM();
+  }  
+}
 
 void loop() {
   if (digitalRead(AlarmButton)==LOW && debounceDigitalRead(AlarmButton)==LOW) {
@@ -760,34 +771,27 @@ void loop() {
   else if (digitalRead(TimeButton)==LOW && debounceDigitalRead(TimeButton)==LOW) {
     setTime();
   } 
-  else if (digitalRead(OffButton)==HIGH && debounceDigitalRead(OffButton)==HIGH) {
-    if (alarmActive) {
-      alarmActive = false;
-      alarmEnabled = false;
-      turnLightOff(lastAlarmLightLevel);
-      waitForButtonDepress(OffButton);
-    } 
-    else if (sunSetActive) {
-      sunSetActive = false;
-      turnLightOff(lastSunSetLightLevel);
-      waitForButtonDepress(OffButton);
-    }
-    else {
-      setSunSet();
-    }
-  } 
-  int16_t encoderDelta = encoder->getValue();
-  if (encoderDelta != 0) 
-  {
-    int delta = (encoderDelta>0 ? 1 : -1);
-    matrixBrightness = max(min(15,matrixBrightness+delta),0); 
-    matrix.setBrightness(matrixBrightness); // 0-15
-    writeBrightnessToEEPROM();
-  }  
-  updateLight();
+//  else if (digitalRead(OffButton)==HIGH && debounceDigitalRead(OffButton)==HIGH) {
+//    if (alarmActive) {
+//      alarmActive = false;
+//      alarmEnabled = false;
+//      turnLightOff(lastAlarmLightLevel);
+//      waitForButtonDepress(OffButton);
+//    } 
+//    else if (sunSetActive) {
+//      sunSetActive = false;
+//      turnLightOff(lastSunSetLightLevel);
+//      waitForButtonDepress(OffButton);
+//    }
+//    else {
+//      setSunSet();
+//    }
+//  } 
+  updateBrightness();
+//  updateLight();
   updateCurrentTime();
   updateClockTime();
-  updateSunSet();
+//  updateSunSet();
   // DONE 2013-03-30:  Add a feature so Fwd and Rew buttons adjust the display brightness
   // DONE 2013-03-30:  Add a feature so the OffButton can be used for SunDown mode when the SunRise mode is not currently active.
   //        Turn on light (ramp up quickly but not instantly) then slowly turn off after 15 minutes
