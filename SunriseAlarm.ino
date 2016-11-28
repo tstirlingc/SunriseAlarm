@@ -299,7 +299,7 @@ bool writeSunDownDeltaToEEPROM() {
 
 
 
-int debounceInterval = 5;
+int debounceInterval = 10;
 int debounceDigitalRead(int pin) {
   int lastResult = digitalRead(pin);
   unsigned long lastRead = millis();
@@ -313,36 +313,7 @@ int debounceDigitalRead(int pin) {
   return lastResult;
 }
 
-void turnLightOn(int currentLevel) {
-  for (int16_t i=currentDimmerStep; i < totalDimmerSteps; ++i) {
-    linearBrightOfStep(i);
-    delay(1);
-  }
-  linearBrightOfStep(totalDimmerSteps);
-}
-
-void turnLightOff() {
-  for (int16_t i=currentDimmerStep; i>0 ; --i) {
-    linearBrightOfStep(i);
-    delay(1);
-  }
-  linearBrightOfStep(0u);
-}
-
-void waitForButtonDepress(int pin) {
-  while (debounceDigitalRead(pin)==LOW) {
-    delay(5);
-  }
-}
-
-// 10W LED with big heatsink:
-//const int minLightLevel = 176;
-//const int maxLightLevel = 1008;
-// MR16 LED light with 3x3W LEDs:
-const int minLightLevel = 320;
-const int maxLightLevel = 800;
-
-uint8_t computeMinRGBLevel(int* RGB)
+uint8_t computeMinRGBLevel(uint8_t* RGB)
 {
   uint8_t myRGB[3] = {255, 255, 255};
   for (uint8_t i=0 ; i<3 ; ++i) 
@@ -352,9 +323,11 @@ uint8_t computeMinRGBLevel(int* RGB)
   return min(min(myRGB[0],myRGB[1]),myRGB[2]);
 }
 
-uint8_t targetColor[3] = {255, 147, 41}; // candle
+
+//uint8_t targetColor[3] = {255, 147, 41}; // candle
 //uint8_t targetColor[3] = {255, 255, 255}; // sun
 //uint8_t targetColor[3] = {255, 0, 0}; // red
+uint8_t targetColor[3] = {50, 0, 0}; // testing
 unsigned long millisecondsIn30Minutes = 1800000;
 uint8_t minRGBLevel = computeMinRGBLevel(targetColor);
 uint16_t totalDimmerSteps = minRGBLevel*NUM_LED;
@@ -388,9 +361,36 @@ void linearBrightOfStep(uint16_t step)
 
 unsigned long linearBrightOfMilliseconds(unsigned long milliseconds)
 {
-  uint16_t = stepNumber = (totalDimmerSteps*milliseconds)/millisecondsIn30Minutes;
+  uint16_t stepNumber = (totalDimmerSteps*milliseconds)/millisecondsIn30Minutes;
   linearBrightOfStep(stepNumber);
 }
+
+void turnLightOn() {
+  int16_t delta = max(1,totalDimmerSteps/500);
+  for (int16_t i=currentDimmerStep; i < totalDimmerSteps; i+=delta) {
+    linearBrightOfStep(i);
+    delay(1);
+  }
+  linearBrightOfStep(totalDimmerSteps);
+}
+
+void turnLightOff() {
+  int16_t delta = max(1,totalDimmerSteps/500);
+  for (int16_t i=currentDimmerStep; i>0 ; i-=delta) {
+    linearBrightOfStep(i);
+    delay(1);
+  }
+  linearBrightOfStep(0u);
+}
+
+void waitForButtonDepress(int pin, uint8_t onState) {
+  while (debounceDigitalRead(pin)==onState) {
+    delay(debounceInterval);
+  }
+}
+
+
+
 
 // DONE:  Update to display 12 hr time
 void updateTimeDisplay(ClockTime t, bool military, bool dots) {
@@ -527,6 +527,9 @@ void setup() {
   updateCurrentTime(true);
   readAlarmTimeFromEEPROM();
   updateStartTime();
+//  turnLightOn();
+//  delay(1000);
+//  turnLightOff();
 }
 
 int32_t secondsBtwDates(ClockTime currentTime, ClockTime alarm) {
@@ -563,7 +566,7 @@ void updateLight() {
     //Serial.println("  outside alarm zone");
     if (alarmActive) {
       //Serial.println("  turning off light and setting alarmActive = false");
-      turnLightOff(maxBright-1);
+      turnLightOff();
       alarmActive = false;
     }
     //Serial.println("  turning on alarmEnabled");
@@ -579,12 +582,12 @@ void updateLight() {
   alarmActive = true;
   if (seconds >= thirtyminutes) {
     //Serial.println("past alarm time but still in alarm zone turning light on full and returning");
-    lastAlarmLightLevel = maxLightLevel;
+    //lastAlarmLightLevel = maxLightLevel;
     //digitalWrite(LEDpinA,HIGH);
     return;
   }
   //Serial.println("in alarm zone during ramp-up, calling linearBright");
-  linearBright(seconds);
+  linearBrightOfMilliseconds(seconds);
 }
 
 
@@ -606,7 +609,7 @@ void setTime() {
   display_Cloc();
   delay(1000);
   updateTimeDisplay(t,true,true);
-  waitForButtonDepress(TimeButton);
+  waitForButtonDepress(TimeButton, LOW);
   unsigned long modeActive = millis();
   bool normalExit = true;
   while (debounceDigitalRead(TimeButton)==HIGH) {
@@ -619,7 +622,7 @@ void setTime() {
     }
   }
   if (normalExit) {
-    waitForButtonDepress(TimeButton);
+    waitForButtonDepress(TimeButton, LOW);
   }
   updateTimeDisplay(t,false,false);
   RTC.adjust(
@@ -645,7 +648,7 @@ void setAlarm() {
   display_ALAr();
   delay(1000);
   updateTimeDisplay(alarmTime,true,true);
-  waitForButtonDepress(AlarmButton);
+  waitForButtonDepress(AlarmButton, LOW);
   unsigned long modeActive = millis();
   bool normalExit = true;
   while (debounceDigitalRead(AlarmButton)==HIGH) {
@@ -658,7 +661,7 @@ void setAlarm() {
     }
   }
   if (normalExit) {
-    waitForButtonDepress(AlarmButton);
+    waitForButtonDepress(AlarmButton, LOW);
   }
   updateStartTime();
   //updateTimeDisplay(startTime,true,true);
@@ -703,17 +706,20 @@ void setSunSet() {
   }
   matrix.writeDisplay();
   sunSetActive = true;
-  turnLightOn(0);
-  waitForButtonDepress(OffButton);
+  turnLightOn();
+  waitForButtonDepress(OffButton, HIGH);
   unsigned long modeActive = millis();
   bool normalExit = true;
-  while (debounceDigitalRead(OffButton)==HIGH) {
+  while (debounceDigitalRead(OffButton)==LOW) {
     int16_t encoderDelta = encoder->getValue();
-    minutes += encoderDelta;
-    minutes = min(0,minutes);
-    matrix.print(minutes);
-    if (minutes == 0) matrix.writeDigitNum(4,0); 
-    matrix.writeDisplay();
+    if (encoderDelta != 0) 
+    {
+      defaultSunSetDelta += encoderDelta;
+      defaultSunSetDelta = max(0,defaultSunSetDelta);
+      matrix.print(defaultSunSetDelta);
+      if (defaultSunSetDelta == 0) matrix.writeDigitNum(4,0); 
+      matrix.writeDisplay();
+    }
     if (static_cast<unsigned long>(millis() - modeActive) > modeInactivePeriod) {
       normalExit = false;
       break;
@@ -721,10 +727,10 @@ void setSunSet() {
   }
   if (defaultSunSetDelta == 0) {
     sunSetActive = false;
-    turnLightOff(maxBright-1);
+    turnLightOff();
   }
   if (normalExit) {
-    waitForButtonDepress(OffButton);
+    waitForButtonDepress(OffButton, HIGH);
   }
   writeSunDownDeltaToEEPROM();
   millisAtStartOfSunSet = millis();
@@ -751,8 +757,8 @@ void updateSunSet() {
     linearBrightOfStep(0);
   }
   else {
-    double temp = -(1800.0*delta)/(finalMillis*1.0) + 1800.0;
-    linearBrightOfMilliseconds(temp);
+    unsigned long temp = totalDimmerSteps - totalDimmerSteps*delta/finalMillis;
+    linearBrightOfStep(temp);
   }
 }
 
@@ -779,13 +785,13 @@ void loop() {
     if (alarmActive) {
       alarmActive = false;
       alarmEnabled = false;
-      turnLightOff(lastAlarmLightLevel);
-      waitForButtonDepress(OffButton);
+      turnLightOff();
+      waitForButtonDepress(OffButton, HIGH);
     } 
     else if (sunSetActive) {
       sunSetActive = false;
-      turnLightOff(lastSunSetLightLevel);
-      waitForButtonDepress(OffButton);
+      turnLightOff();
+      waitForButtonDepress(OffButton, HIGH);
     }
     else {
       setSunSet();
@@ -795,7 +801,7 @@ void loop() {
 //  updateLight();
   updateCurrentTime();
   updateClockTime();
-//  updateSunSet();
+  updateSunSet();
   // DONE 2013-03-30:  Add a feature so Fwd and Rew buttons adjust the display brightness
   // DONE 2013-03-30:  Add a feature so the OffButton can be used for SunDown mode when the SunRise mode is not currently active.
   //        Turn on light (ramp up quickly but not instantly) then slowly turn off after 15 minutes
