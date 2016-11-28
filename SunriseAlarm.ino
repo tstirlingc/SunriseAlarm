@@ -10,6 +10,7 @@
 #include "RTClib.h"
 #include "AT24Cxx.h"
 #include <ClickEncoder.h>
+#include <Adafruit_NeoPixel.h>
 
 
 // 2013-04-06 TODO:  Add a temperature sensor to the lamp and if it exceeds a particular temperature, then turn it off or down
@@ -168,11 +169,11 @@ bool operator!=(ClockTime lhs, ClockTime rhs) {
   return !(lhs == rhs);
 }
 
+
 ClickEncoder *encoder;
 #define ENCODER_PIN0 11
 #define ENCODER_PIN1 12
 
-//const int LEDpinA = 6;
 
 const int AlarmButton = 7;
 const int AlarmLED = 8;
@@ -180,6 +181,10 @@ const int TimeButton = 9;
 const int TimeLED = 13;
 const int OffButton = A0;
 const int AlarmEnabledButton = 5;
+
+#define NUM_LED 32
+#define LED_PIN 6
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LED, LED_PIN, NEO_GRB + NEO_KHZ800);
 
 bool alarmEnabled = true;
 bool alarmActive = false;
@@ -309,19 +314,19 @@ int debounceDigitalRead(int pin) {
 }
 
 void turnLightOn(int currentLevel) {
-  for (int i=currentLevel ; i < maxBright ; ++i) {
-    //timer.pwm(LEDpinA,i);
-    //delay(1);
+  for (int16_t i=currentDimmerStep; i < totalDimmerSteps; ++i) {
+    linearBrightOfStep(i);
+    delay(1);
   }
-  //digitalWrite(LEDpinA,HIGH);
+  linearBrightOfStep(totalDimmerSteps);
 }
 
-void turnLightOff(int currentLevel) {
-  for (int i=currentLevel ; i>0 ; --i) {
-    //timer.pwm(LEDpinA,i);
-    //delay(1);
+void turnLightOff() {
+  for (int16_t i=currentDimmerStep; i>0 ; --i) {
+    linearBrightOfStep(i);
+    delay(1);
   }
-  //digitalWrite(LEDpinA,LOW);
+  linearBrightOfStep(0u);
 }
 
 void waitForButtonDepress(int pin) {
@@ -337,55 +342,54 @@ void waitForButtonDepress(int pin) {
 const int minLightLevel = 320;
 const int maxLightLevel = 800;
 
-// (a1,b1) -> f_1 -> (a2,b2) -> f_2 -> (a3,b3) -> f_3 -> (a4,b4)
-double a1 = 0.0;
-double b1 = minLightLevel;
-double a2 = thirtyminutes-10*60; // 10 minutes before
-double b2 = maxLightLevel*.30; // 30% 
-double a3 = thirtyminutes-5*60; // 5 minutes before
-double b3 = maxLightLevel*.40; // 40%
-double a4 = thirtyminutes;
-double b4 = maxLightLevel;
+uint8_t computeMinRGBLevel(int* RGB)
+{
+  uint8_t myRGB[3] = {255, 255, 255};
+  for (uint8_t i=0 ; i<3 ; ++i) 
+  {
+    if (RGB[i]>0) myRGB[i] = RGB[i];
+  }
+  return min(min(myRGB[0],myRGB[1]),myRGB[2]);
+}
 
-double m1 = (b2-b1)/(a2-a1);
-double c1 = (b1-m1*a1);
-double m2 = (b3-b2)/(a3-a2);
-double c2 = (b2-m2*a2);
-double m3 = (b4-b3)/(a4-a3);
-double c3 = (b3-m3*a3);
+uint8_t targetColor[3] = {255, 147, 41}; // candle
+//uint8_t targetColor[3] = {255, 255, 255}; // sun
+//uint8_t targetColor[3] = {255, 0, 0}; // red
+unsigned long millisecondsIn30Minutes = 1800000;
+uint8_t minRGBLevel = computeMinRGBLevel(targetColor);
+uint16_t totalDimmerSteps = minRGBLevel*NUM_LED;
+uint16_t currentDimmerStep = 0;
+uint8_t baseRGBColor[3] = {0u, 0u, 0u};
+uint8_t highRGBColor[3] = {0u, 0u, 0u};
 
-// This function maps the visible range of the LED to the time interval 0 to 1800 seconds.
-// Visible range on LED at TimerOne Period of 1000us (1 kHz flicker) is [176,1008] at increment of 16.
-// Therefore the two points are (0,176) and (1800,1008) which results in a slope of 0.4622222 and a y-intercept of 176.
-// 2014-03-11:  (0,minlightLevel) -> (1800,maxLightLevel), slope = (maxLightLevel-minLightLevel)/1800
-int lastAlarmLightLevel = 0;
-int32_t linearBright(int32_t level) {
-  //int linearLevel = ceil(maxBright*1.0/(1.0+exp(-(level*1.0-maxTime*0.5)/(maxTime/16.0))));
-  //int linearLevel = level;
-  //int linearLevel = 36.787944117144235*exp(exp(level*0.00075472484480368113));
+void linearBrightOfStep(uint16_t step)
+{
+  currentDimmerStep = step;
+  uint16_t levelForAllLEDs = step / NUM_LED;
+  uint8_t numLEDsAtHigherLevel = step % NUM_LED;
+  for (uint8_t i=0 ; i<3 ; ++i)
+  {
+    baseRGBColor[i] = (targetColor[i]*levelForAllLEDs)/minRGBLevel;
+    highRGBColor[i] = (targetColor[i]*(levelForAllLEDs+1))/minRGBLevel;
+  }
+  for (uint8_t i=0 ; i<NUM_LED ; ++i) 
+  {
+    if (i < numLEDsAtHigherLevel)
+    {
+      strip.setPixelColor(i, highRGBColor[0], highRGBColor[1], highRGBColor[2]);
+    }
+    else
+    {
+      strip.setPixelColor(i, baseRGBColor[0], baseRGBColor[1], baseRGBColor[2]);
+    }
+  }
+  strip.show();
+}
 
-  // (0,176) -> (1800,1008)
-  //int linearLevel = 0.46222222*level + 176; // linear
-  //int linearLevel = 176.0*exp(0.000969577*level); // exponential
-  //int linearLevel = 64.746781646173858*exp(exp(0.00056103794655312409*level)); // exp(exp())
-
-  //This method seems to work well for MR16 9W LED
-  int linearLevel = ((maxLightLevel-minLightLevel)/1800.0)*level+minLightLevel;
-  //This method worked well for 10W LED
-//  int linearLevel = 0;
-//  if (level < a2) {
-//    linearLevel = m1*level+c1;
-//  } else if (level < a3) {
-//    linearLevel = m2*level+c2;
-//  } else {
-//    linearLevel = m3*level+c3;
-//  }
-  
-  //Serial.print("linearLevel = ");
-  //Serial.println(linearLevel);
-  lastAlarmLightLevel = linearLevel;
-  //timer.pwm(LEDpinA,lastAlarmLightLevel);
-  return linearLevel;
+unsigned long linearBrightOfMilliseconds(unsigned long milliseconds)
+{
+  uint16_t = stepNumber = (totalDimmerSteps*milliseconds)/millisecondsIn30Minutes;
+  linearBrightOfStep(stepNumber);
 }
 
 // DONE:  Update to display 12 hr time
@@ -506,6 +510,8 @@ void setup() {
   pinMode(OffButton,INPUT);
   pinMode(AlarmLED, OUTPUT);
   pinMode(TimeLED, OUTPUT);
+  strip.begin();
+  strip.show(); // Initialize all pixels to 'off'
   encoder = new ClickEncoder(ENCODER_PIN0, ENCODER_PIN1, -1, 4);
   Timer1.initialize(1000);
   Timer1.attachInterrupt(timerIsr); 
@@ -702,14 +708,12 @@ void setSunSet() {
   unsigned long modeActive = millis();
   bool normalExit = true;
   while (debounceDigitalRead(OffButton)==HIGH) {
-//    if (digitalRead(FwdButton)==LOW) {
-//      forwardSunSet(defaultSunSetDelta);
-//      modeActive = millis();
-//    } 
-//    else if (digitalRead(RewButton)==LOW) {
-//      rewindSunSet(defaultSunSetDelta);
-//      modeActive = millis();
-//    }
+    int16_t encoderDelta = encoder->getValue();
+    minutes += encoderDelta;
+    minutes = min(0,minutes);
+    matrix.print(minutes);
+    if (minutes == 0) matrix.writeDigitNum(4,0); 
+    matrix.writeDisplay();
     if (static_cast<unsigned long>(millis() - modeActive) > modeInactivePeriod) {
       normalExit = false;
       break;
@@ -744,11 +748,11 @@ void updateSunSet() {
   finalMillis *= 1000;
   if (delta > finalMillis) {
     sunSetActive = false;
-    //digitalWrite(LEDpinA,0);
+    linearBrightOfStep(0);
   }
   else {
     double temp = -(1800.0*delta)/(finalMillis*1.0) + 1800.0;
-    linearBright(temp);
+    linearBrightOfMilliseconds(temp);
   }
 }
 
@@ -760,7 +764,7 @@ void updateBrightness()
     int delta = (encoderDelta>0 ? 1 : -1);
     matrixBrightness = max(min(15,matrixBrightness+delta),0); 
     matrix.setBrightness(matrixBrightness); // 0-15
-    //writeBrightnessToEEPROM();
+    writeBrightnessToEEPROM();
   }  
 }
 
@@ -771,22 +775,22 @@ void loop() {
   else if (digitalRead(TimeButton)==LOW && debounceDigitalRead(TimeButton)==LOW) {
     setTime();
   } 
-//  else if (digitalRead(OffButton)==HIGH && debounceDigitalRead(OffButton)==HIGH) {
-//    if (alarmActive) {
-//      alarmActive = false;
-//      alarmEnabled = false;
-//      turnLightOff(lastAlarmLightLevel);
-//      waitForButtonDepress(OffButton);
-//    } 
-//    else if (sunSetActive) {
-//      sunSetActive = false;
-//      turnLightOff(lastSunSetLightLevel);
-//      waitForButtonDepress(OffButton);
-//    }
-//    else {
-//      setSunSet();
-//    }
-//  } 
+  else if (digitalRead(OffButton)==HIGH && debounceDigitalRead(OffButton)==HIGH) {
+    if (alarmActive) {
+      alarmActive = false;
+      alarmEnabled = false;
+      turnLightOff(lastAlarmLightLevel);
+      waitForButtonDepress(OffButton);
+    } 
+    else if (sunSetActive) {
+      sunSetActive = false;
+      turnLightOff(lastSunSetLightLevel);
+      waitForButtonDepress(OffButton);
+    }
+    else {
+      setSunSet();
+    }
+  } 
   updateBrightness();
 //  updateLight();
   updateCurrentTime();
