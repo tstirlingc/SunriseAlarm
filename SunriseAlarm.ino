@@ -206,9 +206,9 @@ AT24Cxx eeprom;
 ClockTime alarmTime(6,00); 
 ClockTime startTime(5,30);
 
-const int alarm_address = 0;
-const int sundown_address = 2;
-const int brightness_address = 3;
+const int alarm_address = 4;
+const int sundown_address = 6;
+const int brightness_address = 7;
 
 Adafruit_7segment matrix = Adafruit_7segment();
 int matrixBrightness = 0;
@@ -324,13 +324,35 @@ uint8_t computeMinRGBLevel(uint8_t* RGB)
 }
 
 
-//uint8_t targetColor[3] = {255, 147, 41}; // candle
-//uint8_t targetColor[3] = {255, 255, 255}; // sun
-//uint8_t targetColor[3] = {255, 0, 0}; // red
-uint8_t targetColor[3] = {50, 0, 0}; // testing
+const uint8_t candleLight[3] = {255, 147, 41};
+const uint8_t sunLight[3] = {255, 255, 255};
+const uint8_t testingLight[3] = {50, 0, 0};
+uint8_t targetColor[3] = {255, 0, 0};
+
 unsigned long millisecondsIn30Minutes = 1800000;
 uint8_t minRGBLevel = computeMinRGBLevel(targetColor);
 uint16_t totalDimmerSteps = minRGBLevel*NUM_LED;
+
+void setColorForSunDown()
+{
+  for (uint8_t i=0 ; i<3 ; ++i)
+  {
+    targetColor[i] = candleLight[i];    
+  }
+  minRGBLevel = computeMinRGBLevel(targetColor);
+  totalDimmerSteps = minRGBLevel*NUM_LED;
+}
+
+void setColorForSunRise()
+{
+  for (uint8_t i=0 ; i<3 ; ++i)
+  {
+    targetColor[i] = sunLight[i];    
+  }
+  minRGBLevel = computeMinRGBLevel(targetColor);
+  totalDimmerSteps = minRGBLevel*NUM_LED;  
+}
+
 uint16_t currentDimmerStep = 0;
 uint8_t baseRGBColor[3] = {0u, 0u, 0u};
 uint8_t highRGBColor[3] = {0u, 0u, 0u};
@@ -550,44 +572,37 @@ int32_t secondsBtwDates(ClockTime currentTime, ClockTime alarm) {
   return( s );
 }
 
-
-const unsigned lightUpdateInterval = 1000;
+unsigned long alarmStartMillis = 0;
+const unsigned lightUpdateInterval = 200;
 unsigned long lastLightUpdate = millis();
 void updateLight() {
   if (!isTimeNow(lastLightUpdate,lightUpdateInterval)) {
     return;
   }
-  //Serial.println("updateLight");
   ClockTime current = current_clock_time;
   int32_t seconds = secondsBtwDates(current,startTime);
-  //Serial.print("  seconds = ");
-  //Serial.println(seconds);
   if ((seconds < 0) || (seconds >= maxTime)) {
-    //Serial.println("  outside alarm zone");
     if (alarmActive) {
-      //Serial.println("  turning off light and setting alarmActive = false");
       turnLightOff();
       alarmActive = false;
     }
-    //Serial.println("  turning on alarmEnabled");
     alarmEnabled = true;
     return;
   }
-  //Serial.println("inside alarm zone");
   if (!alarmEnabled) {
-    //Serial.println("but alarmEnabled is false");
     return;
   }
-  //Serial.println("turning on alarmActive");
-  alarmActive = true;
+  if (!alarmActive)
+  {
+    setColorForSunRise();
+    alarmStartMillis = millis();
+    alarmActive = true;
+  }
   if (seconds >= thirtyminutes) {
-    //Serial.println("past alarm time but still in alarm zone turning light on full and returning");
-    //lastAlarmLightLevel = maxLightLevel;
-    //digitalWrite(LEDpinA,HIGH);
+    linearBrightOfStep(totalDimmerSteps);
     return;
   }
-  //Serial.println("in alarm zone during ramp-up, calling linearBright");
-  linearBrightOfMilliseconds(seconds);
+  linearBrightOfMilliseconds(millis()-alarmStartMillis);
 }
 
 
@@ -670,32 +685,8 @@ void setAlarm() {
   updateTimeDisplay(current_clock_time,false,false);
   writeAlarmTimeToEEPROM();
   digitalWrite(AlarmLED,LOW);
+  alarmEnabled = true;
 }
-
-void forwardSunSet(int & minutes) {
-//  while (digitalRead(FwdButton)==LOW) {
-//    ++minutes;
-//    matrix.print(minutes);
-//    matrix.writeDisplay();
-//    delay(forward_delay);
-//  }
-}
-
-void rewindSunSet(int & minutes) {
-// while (digitalRead(RewButton)==LOW) {
-//    --minutes;
-//    if (minutes < 0) {
-//      minutes = 0;
-//    }
-//    matrix.print(minutes);
-//    if (minutes == 0) {
-//      matrix.writeDigitNum(4,0);
-//    }
-//    matrix.writeDisplay();
-//    delay(rewind_delay);
-//  }
-}
-
 
 unsigned long millisAtStartOfSunSet = 0;
 bool sunSetActive = false;
@@ -794,11 +785,12 @@ void loop() {
       waitForButtonDepress(OffButton, HIGH);
     }
     else {
+      setColorForSunDown();
       setSunSet();
     }
   } 
   updateBrightness();
-//  updateLight();
+  updateLight();
   updateCurrentTime();
   updateClockTime();
   updateSunSet();
