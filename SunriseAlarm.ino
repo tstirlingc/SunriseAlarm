@@ -180,7 +180,7 @@ const int AlarmLED = 8;
 const int TimeButton = 9;
 const int TimeLED = 13;
 const int OffButton = A0;
-const int AlarmEnabledButton = 5;
+const int AlarmEnabledSwitch = 5;
 
 #define NUM_LED 32
 #define LED_PIN 6
@@ -224,7 +224,7 @@ uint8_t raw_t = 0x78;
 uint8_t raw_d = 0x5E;
 uint8_t dot_bit = 0x80;
 
-RTC_DS1307 RTC;
+RTC_DS3231 RTC;
 unsigned long synchronized_clock_millis;
 ClockTime synchronized_clock_time;
 ClockTime current_clock_time;
@@ -387,6 +387,23 @@ unsigned long linearBrightOfMilliseconds(unsigned long milliseconds)
   linearBrightOfStep(stepNumber);
 }
 
+void logisticBrightOfStep(uint16_t step)
+{
+  float p = ((float)step)/((float)totalDimmerSteps);
+  float L = 1.0;
+  float k = 20.0;
+  float x0 = 0.5;
+  float logisticP = L/(1+exp(-k*(p-x0)));
+  uint16_t logisticStep = logisticP*totalDimmerSteps;
+  linearBrightOfStep(logisticStep);
+}
+
+void logisticBrightOfMilliseconds(unsigned long milliseconds)
+{
+  uint16_t stepNumber = (totalDimmerSteps*milliseconds)/millisecondsIn30Minutes;
+  logisticBrightOfStep(stepNumber);
+}
+
 void turnLightOn() {
   int16_t delta = max(1,totalDimmerSteps/500);
   for (int16_t i=currentDimmerStep; i < totalDimmerSteps; i+=delta) {
@@ -529,6 +546,7 @@ void setup() {
   //pinMode(LEDpinA,OUTPUT); digitalWrite(LEDpinA,0);
   pinMode(AlarmButton,INPUT_PULLUP); 
   pinMode(TimeButton,INPUT_PULLUP);
+  pinMode(AlarmEnabledSwitch, INPUT_PULLUP);
   pinMode(OffButton,INPUT);
   pinMode(AlarmLED, OUTPUT);
   pinMode(TimeLED, OUTPUT);
@@ -573,12 +591,13 @@ int32_t secondsBtwDates(ClockTime currentTime, ClockTime alarm) {
 }
 
 unsigned long alarmStartMillis = 0;
-const unsigned lightUpdateInterval = 200;
+const unsigned lightUpdateInterval = 50;
 unsigned long lastLightUpdate = millis();
 void updateLight() {
   if (!isTimeNow(lastLightUpdate,lightUpdateInterval)) {
     return;
   }
+  if (digitalRead(AlarmEnabledSwitch) == LOW) return;
   ClockTime current = current_clock_time;
   int32_t seconds = secondsBtwDates(current,startTime);
   if ((seconds < 0) || (seconds >= maxTime)) {
@@ -595,14 +614,14 @@ void updateLight() {
   if (!alarmActive)
   {
     setColorForSunRise();
-    alarmStartMillis = millis();
+    alarmStartMillis = static_cast<unsigned long>(millis()-1000*seconds);
     alarmActive = true;
   }
   if (seconds >= thirtyminutes) {
     linearBrightOfStep(totalDimmerSteps);
     return;
   }
-  linearBrightOfMilliseconds(millis()-alarmStartMillis);
+  logisticBrightOfMilliseconds(static_cast<unsigned long>(millis()-alarmStartMillis));
 }
 
 
@@ -749,7 +768,7 @@ void updateSunSet() {
   }
   else {
     unsigned long temp = totalDimmerSteps - totalDimmerSteps*delta/finalMillis;
-    linearBrightOfStep(temp);
+    logisticBrightOfStep(temp);
   }
 }
 
