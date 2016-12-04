@@ -175,12 +175,13 @@ ClickEncoder *encoder;
 #define ENCODER_PIN1 12
 
 
-const int AlarmButton = 7;
-const int AlarmLED = 8;
-const int TimeButton = 9;
-const int TimeLED = 13;
-const int OffButton = A0;
-const int AlarmEnabledSwitch = 5;
+#define AlarmButton 7
+#define AlarmLED 5
+#define TimeButton 9
+#define TimeLED 10
+#define OffButton A0
+#define AlarmEnabledSwitch 8
+#define RotaryButton A1
 
 #define NUM_LED 32
 #define LED_PIN 6
@@ -547,6 +548,7 @@ void setup() {
   pinMode(AlarmButton,INPUT_PULLUP); 
   pinMode(TimeButton,INPUT_PULLUP);
   pinMode(AlarmEnabledSwitch, INPUT_PULLUP);
+  pinMode(RotaryButton, INPUT_PULLUP);
   pinMode(OffButton,INPUT);
   pinMode(AlarmLED, OUTPUT);
   pinMode(TimeLED, OUTPUT);
@@ -557,9 +559,9 @@ void setup() {
   Timer1.attachInterrupt(timerIsr); 
   //timer.initialize(timerPeriod);
   //timer.pwm(LEDpinA, 0); //set up pin 9
+  while (!eeprom.isPresent()) { delay(1); }
   matrix.begin(0x70);
   display_todd();
-  //while (!eeprom.isPresent()) { delay(1); }
   readBrightnessFromEEPROM();
   matrix.setBrightness(matrixBrightness); // 0-15
   readSunDownDeltaFromEEPROM();
@@ -637,7 +639,7 @@ void updateAlarm(int16_t delta) {
 
 
 void setTime() {
-  digitalWrite(TimeLED,HIGH);
+  analogWrite(TimeLED,matrixBrightness*255/16+15);
   DateTime currentTime = RTC.now();
   ClockTime t(currentTime);
   display_Cloc();
@@ -678,7 +680,7 @@ void setTime() {
 }
 
 void setAlarm() {
-  digitalWrite(AlarmLED,HIGH);
+  analogWrite(AlarmLED,matrixBrightness*255/16+1);
   display_ALAr();
   delay(1000);
   updateTimeDisplay(alarmTime,true,true);
