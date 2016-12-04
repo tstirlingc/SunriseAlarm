@@ -11,7 +11,8 @@
 #include "AT24Cxx.h"
 #include <ClickEncoder.h>
 #include <Adafruit_NeoPixel.h>
-
+#include <SoftwareSerial.h>
+#include "Adafruit_Soundboard.h"
 
 // 2013-04-06 TODO:  Add a temperature sensor to the lamp and if it exceeds a particular temperature, then turn it off or down
 // 2013-04-06 TODO:  Add three LEDs inside the enclosure to indicate which mode you are in.  E.g. green for alarm, blue for time, and red for sundown.
@@ -180,13 +181,22 @@ ClickEncoder *encoder;
 #define TimeButton 9
 #define TimeLED 10
 #define OffButton A0
-#define AlarmEnabledSwitch 8
+#define alarmMasterSwitch 8
 #define RotaryButton A1
+
+// Sound effects serial TX/RX pins:
+#define SFX_TX 5
+#define SFX_RX 6
+// Sound effects reset pin:
+#define SFX_RST 4
+SoftwareSerial ss = SoftwareSerial(SFX_TX, SFX_RX);
+Adafruit_Soundboard sfx = Adafruit_Soundboard(&ss, NULL, SFX_RST);
 
 #define NUM_LED 32
 #define LED_PIN 6
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LED, LED_PIN, NEO_GRB + NEO_KHZ800);
 
+bool alarmMasterSwitchEnabled = true;
 bool alarmEnabled = true;
 bool alarmActive = false;
 
@@ -475,7 +485,7 @@ void updateCurrentTime(bool force=false) {
     current_clock_time.minute += minutes_delta;
     current_clock_time.second += (seconds_delta - minutes_delta*60);
     current_clock_time.fixTime();
-    updateTimeDisplay(current_clock_time,false,false);
+    updateTimeDisplay(current_clock_time,false,alarmMasterSwitchEnabled);
   }
 }
 
@@ -547,11 +557,12 @@ void setup() {
   //pinMode(LEDpinA,OUTPUT); digitalWrite(LEDpinA,0);
   pinMode(AlarmButton,INPUT_PULLUP); 
   pinMode(TimeButton,INPUT_PULLUP);
-  pinMode(AlarmEnabledSwitch, INPUT_PULLUP);
+  pinMode(alarmMasterSwitch, INPUT_PULLUP);
   pinMode(RotaryButton, INPUT_PULLUP);
   pinMode(OffButton,INPUT);
   pinMode(AlarmLED, OUTPUT);
   pinMode(TimeLED, OUTPUT);
+  alarmMasterSwitchEnabled = (digitalRead(alarmMasterSwitch) == HIGH);
   strip.begin();
   strip.show(); // Initialize all pixels to 'off'
   encoder = new ClickEncoder(ENCODER_PIN0, ENCODER_PIN1, -1, 4);
@@ -561,6 +572,16 @@ void setup() {
   //timer.pwm(LEDpinA, 0); //set up pin 9
   while (!eeprom.isPresent()) { delay(1); }
   matrix.begin(0x70);
+  ss.begin(9600);
+  if (!sfx.reset()) {
+    Serial.println("SFX board not found");
+    while(1);
+  }
+  // Reduce volume on SFX board:
+  if (sfx.volDown() > 128) {
+    while (sfx.volDown() > 128) {}
+  }
+  // Play an easter-egg message while displaying my name...
   display_todd();
   readBrightnessFromEEPROM();
   matrix.setBrightness(matrixBrightness); // 0-15
@@ -569,6 +590,7 @@ void setup() {
   updateCurrentTime(true);
   readAlarmTimeFromEEPROM();
   updateStartTime();
+  
 //  turnLightOn();
 //  delay(1000);
 //  turnLightOff();
@@ -595,16 +617,18 @@ int32_t secondsBtwDates(ClockTime currentTime, ClockTime alarm) {
 unsigned long alarmStartMillis = 0;
 const unsigned lightUpdateInterval = 50;
 unsigned long lastLightUpdate = millis();
+bool sfx_playing = false;
 void updateLight() {
   if (!isTimeNow(lastLightUpdate,lightUpdateInterval)) {
     return;
   }
-  if (digitalRead(AlarmEnabledSwitch) == LOW) return;
+  if (digitalRead(alarmMasterSwitch) == LOW) return;
   ClockTime current = current_clock_time;
   int32_t seconds = secondsBtwDates(current,startTime);
   if ((seconds < 0) || (seconds >= maxTime)) {
     if (alarmActive) {
       turnLightOff();
+      sfx.stop();
       alarmActive = false;
     }
     alarmEnabled = true;
@@ -623,18 +647,21 @@ void updateLight() {
     linearBrightOfStep(totalDimmerSteps);
     return;
   }
+  if (seconds == thirtyminutes && !sfx_playing) {
+    sfx_playing = sfx.playTrack("WAKE.OGG");
+  }
   logisticBrightOfMilliseconds(static_cast<unsigned long>(millis()-alarmStartMillis));
 }
 
 
 void updateTime(ClockTime & t, int16_t delta) {
   t.minute += delta;
-  updateTimeDisplay(t,true,true);
+  updateTimeDisplay(t,true,alarmMasterSwitchEnabled);
 }
 
 void updateAlarm(int16_t delta) {
   alarmTime += delta;
-  updateTimeDisplay(alarmTime,true,true);
+  updateTimeDisplay(alarmTime,true,alarmMasterSwitchEnabled);
 }
 
 
@@ -644,7 +671,7 @@ void setTime() {
   ClockTime t(currentTime);
   display_Cloc();
   delay(1000);
-  updateTimeDisplay(t,true,true);
+  updateTimeDisplay(t,true,alarmMasterSwitchEnabled);
   waitForButtonDepress(TimeButton, LOW);
   unsigned long modeActive = millis();
   bool normalExit = true;
@@ -660,7 +687,7 @@ void setTime() {
   if (normalExit) {
     waitForButtonDepress(TimeButton, LOW);
   }
-  updateTimeDisplay(t,false,false);
+  updateTimeDisplay(t,false,alarmMasterSwitchEnabled);
   RTC.adjust(
     DateTime( currentTime.year(), 
               currentTime.month(), 
@@ -683,7 +710,7 @@ void setAlarm() {
   analogWrite(AlarmLED,matrixBrightness*255/16+1);
   display_ALAr();
   delay(1000);
-  updateTimeDisplay(alarmTime,true,true);
+  updateTimeDisplay(alarmTime,true,alarmMasterSwitchEnabled);
   waitForButtonDepress(AlarmButton, LOW);
   unsigned long modeActive = millis();
   bool normalExit = true;
@@ -700,10 +727,10 @@ void setAlarm() {
     waitForButtonDepress(AlarmButton, LOW);
   }
   updateStartTime();
-  //updateTimeDisplay(startTime,true,true);
+  //updateTimeDisplay(startTime,true,alarmMasterSwitchEnabled);
   //delay(2000);
   updateCurrentTime(true);
-  updateTimeDisplay(current_clock_time,false,false);
+  updateTimeDisplay(current_clock_time,false,alarmMasterSwitchEnabled);
   writeAlarmTimeToEEPROM();
   digitalWrite(AlarmLED,LOW);
   alarmEnabled = true;
@@ -798,6 +825,7 @@ void loop() {
       alarmActive = false;
       alarmEnabled = false;
       turnLightOff();
+      sfx.stop();
       waitForButtonDepress(OffButton, HIGH);
     } 
     else if (sunSetActive) {
@@ -810,6 +838,18 @@ void loop() {
       setSunSet();
     }
   } 
+  if (digitalRead(alarmMasterSwitch) == LOW) {
+    alarmMasterSwitchEnabled = false;
+    if (alarmEnabled && alarmActive) {
+      alarmActive = false;
+      alarmEnabled = false;
+      turnLightOff();
+      sfx.stop();
+    }
+  }
+  else {
+    alarmMasterSwitchEnabled = true;
+  }
   updateBrightness();
   updateLight();
   updateCurrentTime();
