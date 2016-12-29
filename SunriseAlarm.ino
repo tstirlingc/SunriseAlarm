@@ -44,12 +44,14 @@ struct ClockTime {
   ClockTime(int h, int m, int s) : hour(h), minute(m), second(s) {}
   ClockTime(DateTime dt) : hour(dt.hour()), minute(dt.minute()), second(dt.second()) {}
   ClockTime(const ClockTime & ct) : hour(ct.hour), minute(ct.minute), second(ct.second) {}
+
   ClockTime operator++(int) {
     ClockTime result(*this);
     ++this->minute;
     fixTime();
     return result;
   }
+
   ClockTime operator+=(int16_t delta)
   {
     ClockTime result(*this);
@@ -57,6 +59,7 @@ struct ClockTime {
     fixTime();
     return result;
   }
+
   ClockTime operator-=(int16_t delta)
   {
     ClockTime result(*this);
@@ -64,46 +67,53 @@ struct ClockTime {
     fixTime();
     return result;
   }
+
   ClockTime operator--(int) {
     ClockTime result(*this);
     --this->minute;
     fixTime();
     return result;
   }
+
   ClockTime & operator++() {
     ++this->minute;
     fixTime();
     return *this;
   }
+
   ClockTime & operator--() {
     --this->minute;
     fixTime();
     return *this;
   }    
+
   void fixTime() {
     while (this->second > 59) {
       ++this->minute;
       this->second -= 60;
     }
-    while (this->minute > 59) {
-      ++this->hour;
-      this->minute -= 60;
-    }
-    while (this->hour > 23) {
-      this->hour -= 24;
-    }
     while (this->second < 0) {
       --this->minute;
       this->second += 60;
+    }
+
+    while (this->minute > 59) {
+      ++this->hour;
+      this->minute -= 60;
     }
     while (this->minute < 0) {
       --this->hour;
       this->minute += 60;
     }
+
+    while (this->hour > 23) {
+      this->hour -= 24;
+    }
     while (this->hour < 0) {
       this->hour += 24;
     }
   }
+
   int hour;
   int minute;
   int second;
@@ -182,7 +192,7 @@ ClickEncoder *encoder;
 #define TimeLED 10
 #define OffButton A0
 #define alarmMasterSwitch 8
-#define RotaryButton A1
+#define rotaryButton 13
 
 // Sound effects serial TX/RX pins:
 #define SFX_TX 5
@@ -558,7 +568,7 @@ void setup() {
   pinMode(AlarmButton,INPUT_PULLUP); 
   pinMode(TimeButton,INPUT_PULLUP);
   pinMode(alarmMasterSwitch, INPUT_PULLUP);
-  pinMode(RotaryButton, INPUT_PULLUP);
+  pinMode(rotaryButton, INPUT_PULLUP);
   pinMode(OffButton,INPUT);
   pinMode(AlarmLED, OUTPUT);
   pinMode(TimeLED, OUTPUT);
@@ -803,14 +813,24 @@ void updateSunSet() {
 
 void updateBrightness()
 {
-  int16_t encoderDelta = encoder->getValue();
-  if (encoderDelta != 0) 
-  {
-    int delta = (encoderDelta>0 ? 1 : -1);
-    matrixBrightness = max(min(15,matrixBrightness+delta),0); 
-    matrix.setBrightness(matrixBrightness); // 0-15
-    writeBrightnessToEEPROM();
-  }  
+  unsigned long modeActive = millis();
+  bool normalExit = true;
+  while (debounceDigitalRead(rotaryButton)==HIGH) {
+    int16_t encoderDelta = encoder->getValue();
+    if (encoderDelta != 0) {
+      int delta = (encoderDelta>0 ? 1 : -1);
+      matrixBrightness = max(min(15,matrixBrightness+delta),0); 
+      matrix.setBrightness(matrixBrightness); // 0-15
+    }  
+    if (static_cast<unsigned long>(millis() - modeActive) > modeInactivePeriod) {
+      normalExit = false;
+      break;
+    }
+  }
+  if (normalExit) {
+    waitForButtonDepress(rotaryButton, LOW);
+  }
+  writeBrightnessToEEPROM();
 }
 
 void loop() {
@@ -838,6 +858,10 @@ void loop() {
       setSunSet();
     }
   } 
+  else if (digitalRead(rotaryButton)==LOW && debounceDigitalRead(rotaryButton)==LOW) {
+    updateBrightness();
+  }
+
   if (digitalRead(alarmMasterSwitch) == LOW) {
     alarmMasterSwitchEnabled = false;
     if (alarmEnabled && alarmActive) {
@@ -850,7 +874,6 @@ void loop() {
   else {
     alarmMasterSwitchEnabled = true;
   }
-  updateBrightness();
   updateLight();
   updateCurrentTime();
   updateClockTime();
