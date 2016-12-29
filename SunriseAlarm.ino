@@ -33,7 +33,7 @@
 // DONE 2013-03-28:  Add hardware buttons for setting time and alarm
 // TODO:  Add audio:  chirping birds at alarm time
 // TODO:  Add snooze button to delay chirping for 7 minutes or so
-// DONE 2013-04-17:  Change light alarm so it is based on millis() rather than RTC 
+// DONE 2013-04-17:  Change light alarm so it is based on millis() rather than RTC
 // TODO:  Get light updated more often, especially in third slope of alarm.
 
 namespace SunriseAlarm {
@@ -85,7 +85,7 @@ struct ClockTime {
     --this->minute;
     fixTime();
     return *this;
-  }    
+  }
 
   void fixTime() {
     while (this->second > 59) {
@@ -120,13 +120,13 @@ struct ClockTime {
 };
 
 
-ClockTime operator+(ClockTime lhs, int minutes) { 
-    lhs.minute+=minutes;
-    lhs.fixTime();
-    return lhs;
+ClockTime operator+(ClockTime lhs, int minutes) {
+  lhs.minute += minutes;
+  lhs.fixTime();
+  return lhs;
 }
 
-  
+
 bool operator<(ClockTime lhs, ClockTime rhs) {
   if (lhs.hour < rhs.hour) {
     return true;
@@ -151,7 +151,7 @@ bool operator<(ClockTime lhs, ClockTime rhs) {
 bool operator<=(ClockTime lhs, ClockTime rhs) {
   if (lhs.hour < rhs.hour) {
     return true;
-  } 
+  }
   if (lhs.hour > rhs.hour) {
     return false;
   }
@@ -172,7 +172,7 @@ bool operator<=(ClockTime lhs, ClockTime rhs) {
 bool operator==(ClockTime lhs, ClockTime rhs) {
   if ((lhs.hour == rhs.hour) && (lhs.minute == rhs.minute) && (lhs.second == rhs.second)) {
     return true;
-  } 
+  }
   return false;
 }
 
@@ -192,15 +192,9 @@ ClickEncoder *encoder;
 #define TimeLED 10
 #define OffButton A0
 #define alarmMasterSwitch 8
-#define rotaryButton 13
-
-// Sound effects serial TX/RX pins:
-#define SFX_TX 5
-#define SFX_RX 6
-// Sound effects reset pin:
-#define SFX_RST 4
-SoftwareSerial ss = SoftwareSerial(SFX_TX, SFX_RX);
-Adafruit_Soundboard sfx = Adafruit_Soundboard(&ss, NULL, SFX_RST);
+#define rotaryButton 4
+#define soundAPin A1
+#define soundBPin A2
 
 #define NUM_LED 32
 #define LED_PIN 6
@@ -224,8 +218,8 @@ const unsigned long modeInactivePeriod = 30000; // 30 seconds
 
 AT24Cxx eeprom;
 // This is the time you want to get up.  Lights will start 30 minutes before.
-ClockTime alarmTime(6,00); 
-ClockTime startTime(5,30);
+ClockTime alarmTime(6, 00);
+ClockTime startTime(5, 30);
 
 const int alarm_address = 4;
 const int sundown_address = 6;
@@ -258,7 +252,7 @@ void timerIsr() {
 bool readAlarmTimeFromEEPROM() {
   if (eeprom.isPresent()) {
     char buf[2];
-    eeprom.ReadMem(alarm_address,buf,2);
+    eeprom.ReadMem(alarm_address, buf, 2);
     alarmTime.hour = static_cast<int>(buf[0]);
     alarmTime.minute = static_cast<int>(buf[1]);
     return true;
@@ -269,9 +263,9 @@ bool readAlarmTimeFromEEPROM() {
 bool writeAlarmTimeToEEPROM() {
   if (eeprom.isPresent()) {
     char myBuf[2];
-    myBuf[0] = static_cast<char>(alarmTime.hour); 
+    myBuf[0] = static_cast<char>(alarmTime.hour);
     myBuf[1] = static_cast<char>(alarmTime.minute);
-    eeprom.WriteMem(alarm_address,myBuf,2);
+    eeprom.WriteMem(alarm_address, myBuf, 2);
     return true;
   }
   return false;
@@ -280,7 +274,7 @@ bool writeAlarmTimeToEEPROM() {
 bool readBrightnessFromEEPROM() {
   if (eeprom.isPresent()) {
     char buf[1];
-    eeprom.ReadMem(brightness_address,buf,1);
+    eeprom.ReadMem(brightness_address, buf, 1);
     matrixBrightness = static_cast<int>(buf[0]);
     return true;
   }
@@ -290,8 +284,8 @@ bool readBrightnessFromEEPROM() {
 bool writeBrightnessToEEPROM() {
   if (eeprom.isPresent()) {
     char myBuf[1];
-    myBuf[0] = static_cast<char>(matrixBrightness); 
-    eeprom.WriteMem(brightness_address,myBuf,1);
+    myBuf[0] = static_cast<char>(matrixBrightness);
+    eeprom.WriteMem(brightness_address, myBuf, 1);
     return true;
   }
   return false;
@@ -301,7 +295,7 @@ bool writeBrightnessToEEPROM() {
 bool readSunDownDeltaFromEEPROM() {
   if (eeprom.isPresent()) {
     char buf[1];
-    eeprom.ReadMem(sundown_address,buf,1);
+    eeprom.ReadMem(sundown_address, buf, 1);
     defaultSunSetDelta = static_cast<int>(buf[0]);
     return true;
   }
@@ -311,8 +305,8 @@ bool readSunDownDeltaFromEEPROM() {
 bool writeSunDownDeltaToEEPROM() {
   if (eeprom.isPresent()) {
     char myBuf[1];
-    myBuf[0] = static_cast<char>(defaultSunSetDelta); 
-    eeprom.WriteMem(sundown_address,myBuf,1);
+    myBuf[0] = static_cast<char>(defaultSunSetDelta);
+    eeprom.WriteMem(sundown_address, myBuf, 1);
     return true;
   }
   return false;
@@ -337,11 +331,11 @@ int debounceDigitalRead(int pin) {
 uint8_t computeMinRGBLevel(uint8_t* RGB)
 {
   uint8_t myRGB[3] = {255, 255, 255};
-  for (uint8_t i=0 ; i<3 ; ++i) 
+  for (uint8_t i = 0 ; i < 3 ; ++i)
   {
-    if (RGB[i]>0) myRGB[i] = RGB[i];
+    if (RGB[i] > 0) myRGB[i] = RGB[i];
   }
-  return min(min(myRGB[0],myRGB[1]),myRGB[2]);
+  return min(min(myRGB[0], myRGB[1]), myRGB[2]);
 }
 
 
@@ -352,26 +346,26 @@ uint8_t targetColor[3] = {255, 0, 0};
 
 unsigned long millisecondsIn30Minutes = 1800000;
 uint8_t minRGBLevel = computeMinRGBLevel(targetColor);
-uint16_t totalDimmerSteps = minRGBLevel*NUM_LED;
+uint16_t totalDimmerSteps = minRGBLevel * NUM_LED;
 
 void setColorForSunDown()
 {
-  for (uint8_t i=0 ; i<3 ; ++i)
+  for (uint8_t i = 0 ; i < 3 ; ++i)
   {
-    targetColor[i] = candleLight[i];    
+    targetColor[i] = candleLight[i];
   }
   minRGBLevel = computeMinRGBLevel(targetColor);
-  totalDimmerSteps = minRGBLevel*NUM_LED;
+  totalDimmerSteps = minRGBLevel * NUM_LED;
 }
 
 void setColorForSunRise()
 {
-  for (uint8_t i=0 ; i<3 ; ++i)
+  for (uint8_t i = 0 ; i < 3 ; ++i)
   {
-    targetColor[i] = sunLight[i];    
+    targetColor[i] = sunLight[i];
   }
   minRGBLevel = computeMinRGBLevel(targetColor);
-  totalDimmerSteps = minRGBLevel*NUM_LED;  
+  totalDimmerSteps = minRGBLevel * NUM_LED;
 }
 
 uint16_t currentDimmerStep = 0;
@@ -383,12 +377,12 @@ void linearBrightOfStep(uint16_t step)
   currentDimmerStep = step;
   uint16_t levelForAllLEDs = step / NUM_LED;
   uint8_t numLEDsAtHigherLevel = step % NUM_LED;
-  for (uint8_t i=0 ; i<3 ; ++i)
+  for (uint8_t i = 0 ; i < 3 ; ++i)
   {
-    baseRGBColor[i] = (targetColor[i]*levelForAllLEDs)/minRGBLevel;
-    highRGBColor[i] = (targetColor[i]*(levelForAllLEDs+1))/minRGBLevel;
+    baseRGBColor[i] = (targetColor[i] * levelForAllLEDs) / minRGBLevel;
+    highRGBColor[i] = (targetColor[i] * (levelForAllLEDs + 1)) / minRGBLevel;
   }
-  for (uint8_t i=0 ; i<NUM_LED ; ++i) 
+  for (uint8_t i = 0 ; i < NUM_LED ; ++i)
   {
     if (i < numLEDsAtHigherLevel)
     {
@@ -404,30 +398,30 @@ void linearBrightOfStep(uint16_t step)
 
 unsigned long linearBrightOfMilliseconds(unsigned long milliseconds)
 {
-  uint16_t stepNumber = (totalDimmerSteps*milliseconds)/millisecondsIn30Minutes;
+  uint16_t stepNumber = (totalDimmerSteps * milliseconds) / millisecondsIn30Minutes;
   linearBrightOfStep(stepNumber);
 }
 
 void logisticBrightOfStep(uint16_t step)
 {
-  float p = ((float)step)/((float)totalDimmerSteps);
+  float p = ((float)step) / ((float)totalDimmerSteps);
   float L = 1.0;
   float k = 20.0;
   float x0 = 0.5;
-  float logisticP = L/(1+exp(-k*(p-x0)));
-  uint16_t logisticStep = logisticP*totalDimmerSteps;
+  float logisticP = L / (1 + exp(-k * (p - x0)));
+  uint16_t logisticStep = logisticP * totalDimmerSteps;
   linearBrightOfStep(logisticStep);
 }
 
 void logisticBrightOfMilliseconds(unsigned long milliseconds)
 {
-  uint16_t stepNumber = (totalDimmerSteps*milliseconds)/millisecondsIn30Minutes;
+  uint16_t stepNumber = (totalDimmerSteps * milliseconds) / millisecondsIn30Minutes;
   logisticBrightOfStep(stepNumber);
 }
 
 void turnLightOn() {
-  int16_t delta = max(1,totalDimmerSteps/500);
-  for (int16_t i=currentDimmerStep; i < totalDimmerSteps; i+=delta) {
+  int16_t delta = max(1, totalDimmerSteps / 500);
+  for (int16_t i = currentDimmerStep; i < totalDimmerSteps; i += delta) {
     linearBrightOfStep(i);
     delay(1);
   }
@@ -435,8 +429,8 @@ void turnLightOn() {
 }
 
 void turnLightOff() {
-  int16_t delta = max(1,totalDimmerSteps/500);
-  for (int16_t i=currentDimmerStep; i>0 ; i-=delta) {
+  int16_t delta = max(1, totalDimmerSteps / 500);
+  for (int16_t i = currentDimmerStep; i > 0 ; i -= delta) {
     linearBrightOfStep(i);
     delay(1);
   }
@@ -444,7 +438,7 @@ void turnLightOff() {
 }
 
 void waitForButtonDepress(int pin, uint8_t onState) {
-  while (debounceDigitalRead(pin)==onState) {
+  while (debounceDigitalRead(pin) == onState) {
     delay(debounceInterval);
   }
 }
@@ -457,20 +451,22 @@ void updateTimeDisplay(ClockTime t, bool military, bool dots) {
   matrix.print(0);
   int hour = t.hour;
   if (!military) {
-    hour = (t.hour > 12) ? t.hour-12 : t.hour ;
-    if (hour == 0) { hour += 12; }
-  } 
+    hour = (t.hour > 12) ? t.hour - 12 : t.hour ;
+    if (hour == 0) {
+      hour += 12;
+    }
+  }
   int digit0 = hour / 10;
   int digit1 = hour % 10;
   int digit3 = t.minute / 10;
   int digit4 = t.minute % 10;
   if (digit0 > 0) {
-    matrix.writeDigitNum(0,digit0,dots);
-  } 
-  matrix.writeDigitNum(1,digit1, dots);
-  matrix.writeDigitNum(2,1); // colon
-  matrix.writeDigitNum(3,digit3,dots);
-  matrix.writeDigitNum(4,digit4,dots);
+    matrix.writeDigitNum(0, digit0, dots);
+  }
+  matrix.writeDigitNum(1, digit1, dots);
+  matrix.writeDigitNum(2, 1); // colon
+  matrix.writeDigitNum(3, digit3, dots);
+  matrix.writeDigitNum(4, digit4, dots);
   matrix.writeDisplay();
 }
 
@@ -478,7 +474,7 @@ void updateTimeDisplay(ClockTime t, bool military, bool dots) {
 // last is the last time this function returned true
 bool isTimeNow(unsigned long & last, unsigned wait) {
   unsigned long time = millis();
-  if (static_cast<unsigned long>(time-last) > wait) {
+  if (static_cast<unsigned long>(time - last) > wait) {
     last = time;
     return true;
   }
@@ -487,22 +483,22 @@ bool isTimeNow(unsigned long & last, unsigned wait) {
 
 const unsigned long updateInterval = 1000; // every second
 unsigned long lastUpdate = millis();
-void updateCurrentTime(bool force=false) {
-  if (force || isTimeNow(lastUpdate,updateInterval)) {
+void updateCurrentTime(bool force = false) {
+  if (force || isTimeNow(lastUpdate, updateInterval)) {
     current_clock_time = synchronized_clock_time;
-    const unsigned long seconds_delta = static_cast<unsigned long>(millis() - synchronized_clock_millis)/1000;
-    const unsigned long minutes_delta = seconds_delta/60;
+    const unsigned long seconds_delta = static_cast<unsigned long>(millis() - synchronized_clock_millis) / 1000;
+    const unsigned long minutes_delta = seconds_delta / 60;
     current_clock_time.minute += minutes_delta;
-    current_clock_time.second += (seconds_delta - minutes_delta*60);
+    current_clock_time.second += (seconds_delta - minutes_delta * 60);
     current_clock_time.fixTime();
-    updateTimeDisplay(current_clock_time,false,alarmMasterSwitchEnabled);
+    updateTimeDisplay(current_clock_time, false, alarmMasterSwitchEnabled);
   }
 }
 
-const unsigned long clockUpdateInterval = 24*60*60*1000; // every 24 hours
+const unsigned long clockUpdateInterval = 24 * 60 * 60 * 1000; // every 24 hours
 unsigned long lastClockUpdate = millis();
-void updateClockTime(bool force=false) {
-  if (force || isTimeNow(lastClockUpdate,clockUpdateInterval)) {
+void updateClockTime(bool force = false) {
+  if (force || isTimeNow(lastClockUpdate, clockUpdateInterval)) {
     synchronized_clock_time = ClockTime(RTC.now());
     synchronized_clock_millis = millis();
     current_clock_time = synchronized_clock_time;
@@ -518,10 +514,10 @@ void updateStartTime() {
 
 void display_Cloc() {
   matrix.clear();
-  matrix.writeDigitRaw(0,raw_C | dot_bit);
-  matrix.writeDigitRaw(1,raw_l | dot_bit);
-  matrix.writeDigitRaw(3,raw_o | dot_bit);
-  matrix.writeDigitRaw(4,raw_c | dot_bit);
+  matrix.writeDigitRaw(0, raw_C | dot_bit);
+  matrix.writeDigitRaw(1, raw_l | dot_bit);
+  matrix.writeDigitRaw(3, raw_o | dot_bit);
+  matrix.writeDigitRaw(4, raw_c | dot_bit);
   matrix.writeDisplay();
 }
 
@@ -529,26 +525,27 @@ void display_Cloc() {
 
 void display_ALAr() {
   matrix.clear();
-  matrix.writeDigitRaw(0,raw_A | dot_bit);
-  matrix.writeDigitRaw(1,raw_L | dot_bit);
-  matrix.writeDigitRaw(3,raw_A | dot_bit);
-  matrix.writeDigitRaw(4,raw_r | dot_bit);
+  matrix.writeDigitRaw(0, raw_A | dot_bit);
+  matrix.writeDigitRaw(1, raw_L | dot_bit);
+  matrix.writeDigitRaw(3, raw_A | dot_bit);
+  matrix.writeDigitRaw(4, raw_r | dot_bit);
   matrix.writeDisplay();
 }
 
 void display_todd() {
   matrix.setBrightness(15);
   matrix.clear();
-  matrix.writeDigitRaw(0,raw_t);
-  matrix.writeDigitRaw(1,raw_o);
-  matrix.writeDigitRaw(3,raw_d);
-  matrix.writeDigitRaw(4,raw_d);
+  matrix.writeDigitRaw(0, raw_t);
+  matrix.writeDigitRaw(1, raw_o);
+  matrix.writeDigitRaw(3, raw_d);
+  matrix.writeDigitRaw(4, raw_d);
   matrix.writeDisplay();
   delay(5000);
 }
 
 void setup() {
   //Serial.begin(9600);
+  //Serial.println("Starting setup...");
   Wire.begin();
   RTC.begin();
   //if (! RTC.isrunning()) {
@@ -556,8 +553,8 @@ void setup() {
   //}
   //RTC.adjust(DateTime(__DATE__, __TIME__));
   //RTC.adjust(
-  //  DateTime( 2013, 
-  //            03, 
+  //  DateTime( 2013,
+  //            03,
   //            24,
   //            06,
   //            14,
@@ -565,32 +562,32 @@ void setup() {
   //          )
   //);
   //pinMode(LEDpinA,OUTPUT); digitalWrite(LEDpinA,0);
-  pinMode(AlarmButton,INPUT_PULLUP); 
-  pinMode(TimeButton,INPUT_PULLUP);
+  pinMode(AlarmButton, INPUT_PULLUP);
+  pinMode(TimeButton, INPUT_PULLUP);
   pinMode(alarmMasterSwitch, INPUT_PULLUP);
   pinMode(rotaryButton, INPUT_PULLUP);
-  pinMode(OffButton,INPUT);
+  pinMode(OffButton, INPUT);
   pinMode(AlarmLED, OUTPUT);
   pinMode(TimeLED, OUTPUT);
+  pinMode(soundAPin, OUTPUT);
+  pinMode(soundBPin, OUTPUT);
+  digitalWrite(AlarmLED, LOW);
+  digitalWrite(TimeLED, LOW);
+  digitalWrite(soundAPin, HIGH);
+  digitalWrite(soundBPin, HIGH);
   alarmMasterSwitchEnabled = (digitalRead(alarmMasterSwitch) == HIGH);
   strip.begin();
+  for (int i=0 ; i<16 ; ++i) { strip.setPixelColor(i,0); }
   strip.show(); // Initialize all pixels to 'off'
   encoder = new ClickEncoder(ENCODER_PIN0, ENCODER_PIN1, -1, 4);
   Timer1.initialize(1000);
-  Timer1.attachInterrupt(timerIsr); 
+  Timer1.attachInterrupt(timerIsr);
   //timer.initialize(timerPeriod);
   //timer.pwm(LEDpinA, 0); //set up pin 9
-  while (!eeprom.isPresent()) { delay(1); }
+  while (!eeprom.isPresent()) {
+    delay(1);
+  }
   matrix.begin(0x70);
-  ss.begin(9600);
-  if (!sfx.reset()) {
-    Serial.println("SFX board not found");
-    while(1);
-  }
-  // Reduce volume on SFX board:
-  if (sfx.volDown() > 128) {
-    while (sfx.volDown() > 128) {}
-  }
   // Play an easter-egg message while displaying my name...
   display_todd();
   readBrightnessFromEEPROM();
@@ -600,16 +597,16 @@ void setup() {
   updateCurrentTime(true);
   readAlarmTimeFromEEPROM();
   updateStartTime();
-  
-//  turnLightOn();
-//  delay(1000);
-//  turnLightOff();
+  //Serial.println("Finished setup!");
+  //  turnLightOn();
+  //  delay(1000);
+  //  turnLightOff();
 }
 
 int32_t secondsBtwDates(ClockTime currentTime, ClockTime alarm) {
   int32_t s = (currentTime.hour - alarm.hour);
   s *= 3600;
-  s += (currentTime.minute - alarm.minute)*60;
+  s += (currentTime.minute - alarm.minute) * 60;
   s += (currentTime.second - alarm.second);
   //Serial.print("Seconds between dates:  currentTime = ");
   //Serial.print(currentTime.hour);
@@ -621,24 +618,30 @@ int32_t secondsBtwDates(ClockTime currentTime, ClockTime alarm) {
   //Serial.print(alarm.minute);
   //Serial.print(", seconds = ");
   //Serial.println(s);
-  return( s );
+  return ( s );
+}
+
+void soundAlarmA(bool status) {
+  digitalWrite(soundAPin, (status ? LOW : HIGH));
+}
+
+void soundAlarmB(bool status) {
+  digitalWrite(soundBPin, (status ? LOW : HIGH));
 }
 
 unsigned long alarmStartMillis = 0;
 const unsigned lightUpdateInterval = 50;
 unsigned long lastLightUpdate = millis();
-bool sfx_playing = false;
 void updateLight() {
-  if (!isTimeNow(lastLightUpdate,lightUpdateInterval)) {
+  if (!isTimeNow(lastLightUpdate, lightUpdateInterval)) {
     return;
   }
   if (digitalRead(alarmMasterSwitch) == LOW) return;
   ClockTime current = current_clock_time;
-  int32_t seconds = secondsBtwDates(current,startTime);
+  int32_t seconds = secondsBtwDates(current, startTime);
   if ((seconds < 0) || (seconds >= maxTime)) {
     if (alarmActive) {
-      turnLightOff();
-      sfx.stop();
+      soundAlarmA(false);
       alarmActive = false;
     }
     alarmEnabled = true;
@@ -650,44 +653,44 @@ void updateLight() {
   if (!alarmActive)
   {
     setColorForSunRise();
-    alarmStartMillis = static_cast<unsigned long>(millis()-1000*seconds);
+    alarmStartMillis = static_cast<unsigned long>(millis() - 1000 * seconds);
     alarmActive = true;
   }
   if (seconds >= thirtyminutes) {
     linearBrightOfStep(totalDimmerSteps);
     return;
   }
-  if (seconds == thirtyminutes && !sfx_playing) {
-    sfx_playing = sfx.playTrack("WAKE.OGG");
+  if (seconds == thirtyminutes) {
+    soundAlarmA(true);
   }
-  logisticBrightOfMilliseconds(static_cast<unsigned long>(millis()-alarmStartMillis));
+  logisticBrightOfMilliseconds(static_cast<unsigned long>(millis() - alarmStartMillis));
 }
 
 
 void updateTime(ClockTime & t, int16_t delta) {
-  t.minute += delta;
-  updateTimeDisplay(t,true,alarmMasterSwitchEnabled);
+  t += delta;
+  updateTimeDisplay(t, true, alarmMasterSwitchEnabled);
 }
 
 void updateAlarm(int16_t delta) {
   alarmTime += delta;
-  updateTimeDisplay(alarmTime,true,alarmMasterSwitchEnabled);
+  updateTimeDisplay(alarmTime, true, alarmMasterSwitchEnabled);
 }
 
 
 void setTime() {
-  analogWrite(TimeLED,matrixBrightness*255/16+15);
+  analogWrite(TimeLED, matrixBrightness * 255 / 16 + 15);
   DateTime currentTime = RTC.now();
   ClockTime t(currentTime);
   display_Cloc();
   delay(1000);
-  updateTimeDisplay(t,true,alarmMasterSwitchEnabled);
+  updateTimeDisplay(t, true, alarmMasterSwitchEnabled);
   waitForButtonDepress(TimeButton, LOW);
   unsigned long modeActive = millis();
   bool normalExit = true;
-  while (debounceDigitalRead(TimeButton)==HIGH) {
+  while (debounceDigitalRead(TimeButton) == HIGH) {
     int16_t encoderDelta = encoder->getValue();
-    updateTime(t,encoderDelta);
+    updateTime(t, encoderDelta);
     modeActive = millis();
     if (static_cast<unsigned long>(millis() - modeActive) > modeInactivePeriod) {
       normalExit = false;
@@ -697,10 +700,10 @@ void setTime() {
   if (normalExit) {
     waitForButtonDepress(TimeButton, LOW);
   }
-  updateTimeDisplay(t,false,alarmMasterSwitchEnabled);
+  updateTimeDisplay(t, false, alarmMasterSwitchEnabled);
   RTC.adjust(
-    DateTime( currentTime.year(), 
-              currentTime.month(), 
+    DateTime( currentTime.year(),
+              currentTime.month(),
               currentTime.day(),
               t.hour,
               t.minute,
@@ -713,19 +716,20 @@ void setTime() {
   synchronized_clock_millis = millis();
   current_clock_time = synchronized_clock_time;
   updateCurrentTime(true);
-  digitalWrite(TimeLED,LOW);
+  digitalWrite(TimeLED, LOW);
 }
 
 void setAlarm() {
-  analogWrite(AlarmLED,matrixBrightness*255/16+1);
+  analogWrite(AlarmLED, matrixBrightness * 255 / 16 + 1);
   display_ALAr();
   delay(1000);
-  updateTimeDisplay(alarmTime,true,alarmMasterSwitchEnabled);
+  updateTimeDisplay(alarmTime, true, alarmMasterSwitchEnabled);
   waitForButtonDepress(AlarmButton, LOW);
   unsigned long modeActive = millis();
   bool normalExit = true;
-  while (debounceDigitalRead(AlarmButton)==HIGH) {
+  while (debounceDigitalRead(AlarmButton) == HIGH) {
     int16_t encoderDelta = encoder->getValue();
+    //Serial.print("encoder Delta = "); Serial.println(encoderDelta);
     updateAlarm(encoderDelta);
     modeActive = millis();
     if (static_cast<unsigned long>(millis() - modeActive) > modeInactivePeriod) {
@@ -740,9 +744,9 @@ void setAlarm() {
   //updateTimeDisplay(startTime,true,alarmMasterSwitchEnabled);
   //delay(2000);
   updateCurrentTime(true);
-  updateTimeDisplay(current_clock_time,false,alarmMasterSwitchEnabled);
+  updateTimeDisplay(current_clock_time, false, alarmMasterSwitchEnabled);
   writeAlarmTimeToEEPROM();
-  digitalWrite(AlarmLED,LOW);
+  digitalWrite(AlarmLED, LOW);
   alarmEnabled = true;
 }
 
@@ -751,7 +755,7 @@ bool sunSetActive = false;
 void setSunSet() {
   matrix.print(defaultSunSetDelta);
   if (defaultSunSetDelta == 0) {
-    matrix.writeDigitNum(4,0);
+    matrix.writeDigitNum(4, 0);
   }
   matrix.writeDisplay();
   sunSetActive = true;
@@ -759,14 +763,14 @@ void setSunSet() {
   waitForButtonDepress(OffButton, HIGH);
   unsigned long modeActive = millis();
   bool normalExit = true;
-  while (debounceDigitalRead(OffButton)==LOW) {
+  while (debounceDigitalRead(OffButton) == LOW) {
     int16_t encoderDelta = encoder->getValue();
-    if (encoderDelta != 0) 
+    if (encoderDelta != 0)
     {
       defaultSunSetDelta += encoderDelta;
-      defaultSunSetDelta = max(0,defaultSunSetDelta);
+      defaultSunSetDelta = max(0, defaultSunSetDelta);
       matrix.print(defaultSunSetDelta);
-      if (defaultSunSetDelta == 0) matrix.writeDigitNum(4,0); 
+      if (defaultSunSetDelta == 0) matrix.writeDigitNum(4, 0);
       matrix.writeDisplay();
     }
     if (static_cast<unsigned long>(millis() - modeActive) > modeInactivePeriod) {
@@ -793,7 +797,7 @@ void updateSunSet() {
   if (!sunSetActive) {
     return;
   }
-  if (!isTimeNow(lastSunSetUpdate,sunSetUpdateInterval)) {
+  if (!isTimeNow(lastSunSetUpdate, sunSetUpdateInterval)) {
     return;
   }
   unsigned long currentMillis = millis();
@@ -806,7 +810,7 @@ void updateSunSet() {
     linearBrightOfStep(0);
   }
   else {
-    unsigned long temp = totalDimmerSteps - totalDimmerSteps*delta/finalMillis;
+    unsigned long temp = totalDimmerSteps - totalDimmerSteps * delta / finalMillis;
     logisticBrightOfStep(temp);
   }
 }
@@ -815,13 +819,14 @@ void updateBrightness()
 {
   unsigned long modeActive = millis();
   bool normalExit = true;
-  while (debounceDigitalRead(rotaryButton)==HIGH) {
+  waitForButtonDepress(rotaryButton, LOW);
+  while (debounceDigitalRead(rotaryButton) == HIGH) {
     int16_t encoderDelta = encoder->getValue();
     if (encoderDelta != 0) {
-      int delta = (encoderDelta>0 ? 1 : -1);
-      matrixBrightness = max(min(15,matrixBrightness+delta),0); 
+      int delta = (encoderDelta > 0 ? 1 : -1);
+      matrixBrightness = max(min(15, matrixBrightness + delta), 0);
       matrix.setBrightness(matrixBrightness); // 0-15
-    }  
+    }
     if (static_cast<unsigned long>(millis() - modeActive) > modeInactivePeriod) {
       normalExit = false;
       break;
@@ -834,20 +839,23 @@ void updateBrightness()
 }
 
 void loop() {
-  if (digitalRead(AlarmButton)==LOW && debounceDigitalRead(AlarmButton)==LOW) {
+  if (digitalRead(AlarmButton) == LOW && debounceDigitalRead(AlarmButton) == LOW) {
+    //Serial.println("Detected alarm button press, calling setAlarm()");
     setAlarm();
-  } 
-  else if (digitalRead(TimeButton)==LOW && debounceDigitalRead(TimeButton)==LOW) {
+  }
+  else if (digitalRead(TimeButton) == LOW && debounceDigitalRead(TimeButton) == LOW) {
+    //Serial.println("Detected time button press, calling setTime()");
     setTime();
-  } 
-  else if (digitalRead(OffButton)==HIGH && debounceDigitalRead(OffButton)==HIGH) {
+  }
+  else if (digitalRead(OffButton) == HIGH && debounceDigitalRead(OffButton) == HIGH) {
+    //Serial.println("Detected off button press");
     if (alarmActive) {
       alarmActive = false;
       alarmEnabled = false;
+      soundAlarmA(false);
       turnLightOff();
-      sfx.stop();
       waitForButtonDepress(OffButton, HIGH);
-    } 
+    }
     else if (sunSetActive) {
       sunSetActive = false;
       turnLightOff();
@@ -857,8 +865,9 @@ void loop() {
       setColorForSunDown();
       setSunSet();
     }
-  } 
-  else if (digitalRead(rotaryButton)==LOW && debounceDigitalRead(rotaryButton)==LOW) {
+  }
+  else if (digitalRead(rotaryButton) == LOW && debounceDigitalRead(rotaryButton) == LOW) {
+    //Serial.println("Detected rotary button press, calling updateBrightness()");
     updateBrightness();
   }
 
@@ -868,7 +877,7 @@ void loop() {
       alarmActive = false;
       alarmEnabled = false;
       turnLightOff();
-      sfx.stop();
+      soundAlarmA(false);
     }
   }
   else {
@@ -883,7 +892,7 @@ void loop() {
   //        Turn on light (ramp up quickly but not instantly) then slowly turn off after 15 minutes
 }
 
-} // namespace SunriseAlarm 
+} // namespace SunriseAlarm
 
 void setup()
 {
