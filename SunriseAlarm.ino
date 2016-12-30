@@ -206,15 +206,17 @@ bool alarmActive = false;
 
 //TimerOne timer;
 const int16_t maxBright = 1024; // resolution of TimerOne::pwm (10 bits)
-const int thirtyminutes = 1800; // 1800 seconds = 30 minutes
+const int thirtyMinutes = 30;
+const int16_t thirtyMinutesInSeconds = 1800; // 1800 seconds = 30 minutes
 //const int timerPeriod = 1000; // 1000us = 1 kHz flicker
 const int16_t maxTime = 3600; // 1.0 hours
 const int forward_delay = 15;
 const int rewind_delay = 150;
+const uint32_t millisecondsIn30Minutes = 1800000;
 
 int defaultSunSetDelta = 15; // minutes
 
-const unsigned long modeInactivePeriod = 30000; // 30 seconds
+const uint32_t modeInactivePeriod = 30000; // 30 seconds
 
 AT24Cxx eeprom;
 // This is the time you want to get up.  Lights will start 30 minutes before.
@@ -240,7 +242,7 @@ uint8_t raw_d = 0x5E;
 uint8_t dot_bit = 0x80;
 
 RTC_DS3231 RTC;
-unsigned long synchronized_clock_millis;
+uint32_t synchronized_clock_millis;
 ClockTime synchronized_clock_time;
 ClockTime current_clock_time;
 
@@ -317,8 +319,8 @@ bool writeSunDownDeltaToEEPROM() {
 int debounceInterval = 10;
 int debounceDigitalRead(int pin) {
   int lastResult = digitalRead(pin);
-  unsigned long lastRead = millis();
-  while (static_cast<unsigned long>(millis() - lastRead) < debounceInterval) {
+  uint32_t lastRead = millis();
+  while (static_cast<uint32_t>(millis() - lastRead) < debounceInterval) {
     int result = digitalRead(pin);
     if (result != lastResult) {
       lastResult = result;
@@ -341,10 +343,11 @@ uint8_t computeMinRGBLevel(uint8_t* RGB)
 
 const uint8_t candleLight[3] = {255, 147, 41};
 const uint8_t sunLight[3] = {255, 255, 255};
+const uint8_t tungsten100W[3] = {255, 214, 170}; 
+const uint8_t halogen[3] = {255, 241, 224};
 const uint8_t testingLight[3] = {50, 0, 0};
 uint8_t targetColor[3] = {255, 0, 0};
 
-unsigned long millisecondsIn30Minutes = 1800000;
 uint8_t minRGBLevel = computeMinRGBLevel(targetColor);
 uint16_t totalDimmerSteps = minRGBLevel * NUM_LED;
 
@@ -362,7 +365,7 @@ void setColorForSunRise()
 {
   for (uint8_t i = 0 ; i < 3 ; ++i)
   {
-    targetColor[i] = sunLight[i];
+    targetColor[i] = tungsten100W[i];
   }
   minRGBLevel = computeMinRGBLevel(targetColor);
   totalDimmerSteps = minRGBLevel * NUM_LED;
@@ -396,7 +399,7 @@ void linearBrightOfStep(uint16_t step)
   strip.show();
 }
 
-unsigned long linearBrightOfMilliseconds(unsigned long milliseconds)
+uint32_t linearBrightOfMilliseconds(uint32_t milliseconds)
 {
   uint16_t stepNumber = (totalDimmerSteps * milliseconds) / millisecondsIn30Minutes;
   linearBrightOfStep(stepNumber);
@@ -405,17 +408,23 @@ unsigned long linearBrightOfMilliseconds(unsigned long milliseconds)
 void logisticBrightOfStep(uint16_t step)
 {
   float p = ((float)step) / ((float)totalDimmerSteps);
+//  Serial.print("logisticBrightOfStep p = "); Serial.println(p);
   float L = 1.0;
   float k = 20.0;
   float x0 = 0.5;
   float logisticP = L / (1 + exp(-k * (p - x0)));
+//  Serial.print("logisticBrightOfStep logisticP = "); Serial.println(logisticP);
   uint16_t logisticStep = logisticP * totalDimmerSteps;
+//  Serial.print("logisticBrightOfStep logisticStep =               "); Serial.println(logisticStep);
   linearBrightOfStep(logisticStep);
 }
 
-void logisticBrightOfMilliseconds(unsigned long milliseconds)
+void logisticBrightOfMilliseconds(uint32_t milliseconds)
 {
-  uint16_t stepNumber = (totalDimmerSteps * milliseconds) / millisecondsIn30Minutes;
+  uint32_t stepNumber = ((uint32_t)(totalDimmerSteps) * milliseconds) / millisecondsIn30Minutes;
+//  Serial.print("logisticBrightOfMilliseconds stepNumber =               "); Serial.print(stepNumber);
+//  Serial.print(", totalDimmerSteps="); Serial.print(totalDimmerSteps);
+//  Serial.print(", millisecondsIn30Minutes="); Serial.println(millisecondsIn30Minutes);
   logisticBrightOfStep(stepNumber);
 }
 
@@ -472,22 +481,22 @@ void updateTimeDisplay(ClockTime t, bool military, bool dots) {
 
 // wait is in milliseconds
 // last is the last time this function returned true
-bool isTimeNow(unsigned long & last, unsigned wait) {
-  unsigned long time = millis();
-  if (static_cast<unsigned long>(time - last) > wait) {
+bool isTimeNow(uint32_t & last, unsigned wait) {
+  uint32_t time = millis();
+  if (static_cast<uint32_t>(time - last) > wait) {
     last = time;
     return true;
   }
   return false;
 }
 
-const unsigned long updateInterval = 1000; // every second
-unsigned long lastUpdate = millis();
+const uint32_t updateInterval = 1000; // every second
+uint32_t lastUpdate = millis();
 void updateCurrentTime(bool force = false) {
   if (force || isTimeNow(lastUpdate, updateInterval)) {
     current_clock_time = synchronized_clock_time;
-    const unsigned long seconds_delta = static_cast<unsigned long>(millis() - synchronized_clock_millis) / 1000;
-    const unsigned long minutes_delta = seconds_delta / 60;
+    const uint32_t seconds_delta = static_cast<uint32_t>(millis() - synchronized_clock_millis) / 1000;
+    const uint32_t minutes_delta = seconds_delta / 60;
     current_clock_time.minute += minutes_delta;
     current_clock_time.second += (seconds_delta - minutes_delta * 60);
     current_clock_time.fixTime();
@@ -495,8 +504,8 @@ void updateCurrentTime(bool force = false) {
   }
 }
 
-const unsigned long clockUpdateInterval = 24 * 60 * 60 * 1000; // every 24 hours
-unsigned long lastClockUpdate = millis();
+const uint32_t clockUpdateInterval = 24 * 60 * 60 * 1000; // every 24 hours
+uint32_t lastClockUpdate = millis();
 void updateClockTime(bool force = false) {
   if (force || isTimeNow(lastClockUpdate, clockUpdateInterval)) {
     synchronized_clock_time = ClockTime(RTC.now());
@@ -507,8 +516,7 @@ void updateClockTime(bool force = false) {
 
 void updateStartTime() {
   startTime = alarmTime;
-  startTime.minute -= 30;
-  startTime.fixTime();
+  startTime -= thirtyMinutes;
 }
 
 
@@ -544,7 +552,7 @@ void display_todd() {
 }
 
 void setup() {
-  //Serial.begin(9600);
+//  Serial.begin(9600);
   //Serial.println("Starting setup...");
   Wire.begin();
   RTC.begin();
@@ -629,9 +637,9 @@ void soundAlarmB(bool status) {
   digitalWrite(soundBPin, (status ? LOW : HIGH));
 }
 
-unsigned long alarmStartMillis = 0;
+uint32_t alarmStartMillis = 0;
 const unsigned lightUpdateInterval = 50;
-unsigned long lastLightUpdate = millis();
+uint32_t lastLightUpdate = millis();
 void updateLight() {
   if (!isTimeNow(lastLightUpdate, lightUpdateInterval)) {
     return;
@@ -653,17 +661,17 @@ void updateLight() {
   if (!alarmActive)
   {
     setColorForSunRise();
-    alarmStartMillis = static_cast<unsigned long>(millis() - 1000 * seconds);
+    alarmStartMillis = static_cast<uint32_t>(millis() - 1000 * seconds);
     alarmActive = true;
   }
-  if (seconds >= thirtyminutes) {
+  if (seconds >= thirtyMinutesInSeconds) {
     linearBrightOfStep(totalDimmerSteps);
+    soundAlarmA(true);
     return;
   }
-  if (seconds == thirtyminutes) {
-    soundAlarmA(true);
-  }
-  logisticBrightOfMilliseconds(static_cast<unsigned long>(millis() - alarmStartMillis));
+  uint32_t debug_millis = static_cast<uint32_t>(millis() - alarmStartMillis);
+//  Serial.print("updateLight: debug_millis =               "); Serial.println(debug_millis);
+  logisticBrightOfMilliseconds(debug_millis);
 }
 
 
@@ -686,13 +694,13 @@ void setTime() {
   delay(1000);
   updateTimeDisplay(t, true, alarmMasterSwitchEnabled);
   waitForButtonDepress(TimeButton, LOW);
-  unsigned long modeActive = millis();
+  uint32_t modeActive = millis();
   bool normalExit = true;
   while (debounceDigitalRead(TimeButton) == HIGH) {
     int16_t encoderDelta = encoder->getValue();
     updateTime(t, encoderDelta);
     modeActive = millis();
-    if (static_cast<unsigned long>(millis() - modeActive) > modeInactivePeriod) {
+    if (static_cast<uint32_t>(millis() - modeActive) > modeInactivePeriod) {
       normalExit = false;
       break;
     }
@@ -725,14 +733,14 @@ void setAlarm() {
   delay(1000);
   updateTimeDisplay(alarmTime, true, alarmMasterSwitchEnabled);
   waitForButtonDepress(AlarmButton, LOW);
-  unsigned long modeActive = millis();
+  uint32_t modeActive = millis();
   bool normalExit = true;
   while (debounceDigitalRead(AlarmButton) == HIGH) {
     int16_t encoderDelta = encoder->getValue();
     //Serial.print("encoder Delta = "); Serial.println(encoderDelta);
     updateAlarm(encoderDelta);
     modeActive = millis();
-    if (static_cast<unsigned long>(millis() - modeActive) > modeInactivePeriod) {
+    if (static_cast<uint32_t>(millis() - modeActive) > modeInactivePeriod) {
       normalExit = false;
       break;
     }
@@ -750,7 +758,7 @@ void setAlarm() {
   alarmEnabled = true;
 }
 
-unsigned long millisAtStartOfSunSet = 0;
+uint32_t millisAtStartOfSunSet = 0;
 bool sunSetActive = false;
 void setSunSet() {
   matrix.print(defaultSunSetDelta);
@@ -761,7 +769,7 @@ void setSunSet() {
   sunSetActive = true;
   turnLightOn();
   waitForButtonDepress(OffButton, HIGH);
-  unsigned long modeActive = millis();
+  uint32_t modeActive = millis();
   bool normalExit = true;
   while (debounceDigitalRead(OffButton) == LOW) {
     int16_t encoderDelta = encoder->getValue();
@@ -773,7 +781,7 @@ void setSunSet() {
       if (defaultSunSetDelta == 0) matrix.writeDigitNum(4, 0);
       matrix.writeDisplay();
     }
-    if (static_cast<unsigned long>(millis() - modeActive) > modeInactivePeriod) {
+    if (static_cast<uint32_t>(millis() - modeActive) > modeInactivePeriod) {
       normalExit = false;
       break;
     }
@@ -790,7 +798,7 @@ void setSunSet() {
 }
 
 
-unsigned long lastSunSetUpdate = millis();
+uint32_t lastSunSetUpdate = millis();
 unsigned sunSetUpdateInterval = 5;
 int lastSunSetLightLevel = 0;
 void updateSunSet() {
@@ -800,9 +808,9 @@ void updateSunSet() {
   if (!isTimeNow(lastSunSetUpdate, sunSetUpdateInterval)) {
     return;
   }
-  unsigned long currentMillis = millis();
-  unsigned long delta = static_cast<unsigned long>(currentMillis - millisAtStartOfSunSet);
-  unsigned long finalMillis = defaultSunSetDelta;
+  uint32_t currentMillis = millis();
+  uint32_t delta = static_cast<uint32_t>(currentMillis - millisAtStartOfSunSet);
+  uint32_t finalMillis = defaultSunSetDelta;
   finalMillis *= 60;
   finalMillis *= 1000;
   if (delta > finalMillis) {
@@ -810,14 +818,14 @@ void updateSunSet() {
     linearBrightOfStep(0);
   }
   else {
-    unsigned long temp = totalDimmerSteps - totalDimmerSteps * delta / finalMillis;
+    uint32_t temp = totalDimmerSteps - totalDimmerSteps * delta / finalMillis;
     logisticBrightOfStep(temp);
   }
 }
 
 void updateBrightness()
 {
-  unsigned long modeActive = millis();
+  uint32_t modeActive = millis();
   bool normalExit = true;
   waitForButtonDepress(rotaryButton, LOW);
   while (debounceDigitalRead(rotaryButton) == HIGH) {
@@ -826,8 +834,9 @@ void updateBrightness()
       int delta = (encoderDelta > 0 ? 1 : -1);
       matrixBrightness = max(min(15, matrixBrightness + delta), 0);
       matrix.setBrightness(matrixBrightness); // 0-15
+      modeActive = millis();
     }
-    if (static_cast<unsigned long>(millis() - modeActive) > modeInactivePeriod) {
+    if (static_cast<uint32_t>(millis() - modeActive) > modeInactivePeriod) {
       normalExit = false;
       break;
     }
