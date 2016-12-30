@@ -195,6 +195,8 @@ ClickEncoder *encoder;
 #define rotaryButton 4
 #define soundAPin A1
 #define soundBPin A2
+bool soundAlarmAPlaying = false;
+bool soundAlarmBPlaying = false;
 
 #define NUM_LED 32
 #define LED_PIN 6
@@ -203,6 +205,7 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LED, LED_PIN, NEO_GRB + NEO_KHZ8
 bool alarmMasterSwitchEnabled = true;
 bool alarmEnabled = true;
 bool alarmActive = false;
+bool snoozeActive = false;
 
 //TimerOne timer;
 const int16_t maxBright = 1024; // resolution of TimerOne::pwm (10 bits)
@@ -214,7 +217,8 @@ const int forward_delay = 15;
 const int rewind_delay = 150;
 const uint32_t millisecondsIn30Minutes = 1800000;
 
-int defaultSunSetDelta = 15; // minutes
+int defaultSunSetDelta = 10; // minutes
+int sunSetDimLevel = 100; // 100 = max bright, 0 = off
 
 const uint32_t modeInactivePeriod = 30000; // 30 seconds
 
@@ -224,22 +228,42 @@ ClockTime alarmTime(6, 00);
 ClockTime startTime(5, 30);
 
 const int alarm_address = 4;
-const int sundown_address = 6;
+const int sunset_address = 6;
 const int brightness_address = 7;
+const int sunset_dim_address = 8;
 
 Adafruit_7segment matrix = Adafruit_7segment();
 int matrixBrightness = 0;
 
-uint8_t raw_C = 0x39;
-uint8_t raw_l = 0x30;
-uint8_t raw_o = 0x5C;
-uint8_t raw_c = 0x58;
-uint8_t raw_A = 0x77;
-uint8_t raw_L = 0x38;
-uint8_t raw_r = 0x50;
-uint8_t raw_t = 0x78;
-uint8_t raw_d = 0x5E;
-uint8_t dot_bit = 0x80;
+// seven segment display:
+//      A
+//    -----
+//   |     |
+// F |     | B
+//   |  G  |
+//    -----
+//   |     |
+// E |     | C
+//   |     |
+//    -----
+//      D   o P
+// Turn on bits using B notation:
+// BPGFEDCBA
+// E.g. to turn on a capital C letter without the dot, use:
+// B00111001
+
+uint8_t raw_C = B00111001;
+uint8_t raw_l = B00110000;
+uint8_t raw_o = B01011100;
+uint8_t raw_c = B01011000;
+uint8_t raw_A = B01110111;
+uint8_t raw_L = B00111000;
+uint8_t raw_r = B01010000;
+uint8_t raw_t = B01111000;
+uint8_t raw_d = B01011110;
+uint8_t dot_bit = B10000000;
+uint8_t raw_S = B01101101;
+uint8_t raw_F = B01110001;
 
 RTC_DS3231 RTC;
 uint32_t synchronized_clock_millis;
@@ -294,21 +318,41 @@ bool writeBrightnessToEEPROM() {
 }
 
 
-bool readSunDownDeltaFromEEPROM() {
+bool readSunSetDeltaFromEEPROM() {
   if (eeprom.isPresent()) {
     char buf[1];
-    eeprom.ReadMem(sundown_address, buf, 1);
+    eeprom.ReadMem(sunset_address, buf, 1);
     defaultSunSetDelta = static_cast<int>(buf[0]);
     return true;
   }
   return false;
 }
 
-bool writeSunDownDeltaToEEPROM() {
+bool writeSunSetDeltaToEEPROM() {
   if (eeprom.isPresent()) {
     char myBuf[1];
     myBuf[0] = static_cast<char>(defaultSunSetDelta);
-    eeprom.WriteMem(sundown_address, myBuf, 1);
+    eeprom.WriteMem(sunset_address, myBuf, 1);
+    return true;
+  }
+  return false;
+}
+
+bool readSunSetDimFromEEPROM() {
+  if (eeprom.isPresent()) {
+    char buf[1];
+    eeprom.ReadMem(sunset_dim_address, buf, 1);
+    sunSetDimLevel = static_cast<int>(buf[0]);
+    return true;
+  }
+  return false;
+}
+
+bool writeSunSetDimToEEPROM() {
+  if (eeprom.isPresent()) {
+    char myBuf[1];
+    myBuf[0] = static_cast<char>(sunSetDimLevel);
+    eeprom.WriteMem(sunset_dim_address, myBuf, 1);
     return true;
   }
   return false;
@@ -347,15 +391,16 @@ const uint8_t tungsten100W[3] = {255, 214, 170};
 const uint8_t halogen[3] = {255, 241, 224};
 const uint8_t testingLight[3] = {50, 0, 0};
 uint8_t targetColor[3] = {255, 0, 0};
+const uint8_t sunRiseDimLevel = 90; // Percentage of max [0, 100]
 
 uint8_t minRGBLevel = computeMinRGBLevel(targetColor);
 uint16_t totalDimmerSteps = minRGBLevel * NUM_LED;
 
-void setColorForSunDown()
+void setColorForSunSet()
 {
   for (uint8_t i = 0 ; i < 3 ; ++i)
   {
-    targetColor[i] = candleLight[i];
+    targetColor[i] = (sunSetDimLevel*1.0/100.0)*(1.0*candleLight[i]);
   }
   minRGBLevel = computeMinRGBLevel(targetColor);
   totalDimmerSteps = minRGBLevel * NUM_LED;
@@ -365,7 +410,7 @@ void setColorForSunRise()
 {
   for (uint8_t i = 0 ; i < 3 ; ++i)
   {
-    targetColor[i] = tungsten100W[i];
+    targetColor[i] = (sunRiseDimLevel*1.0/100.0)*(1.0*tungsten100W[i]);
   }
   minRGBLevel = computeMinRGBLevel(targetColor);
   totalDimmerSteps = minRGBLevel * NUM_LED;
@@ -375,6 +420,7 @@ uint16_t currentDimmerStep = 0;
 uint8_t baseRGBColor[3] = {0u, 0u, 0u};
 uint8_t highRGBColor[3] = {0u, 0u, 0u};
 
+// step range from 0 to minRGBLevel*NUM_LED
 void linearBrightOfStep(uint16_t step)
 {
   currentDimmerStep = step;
@@ -543,12 +589,22 @@ void display_ALAr() {
 void display_todd() {
   matrix.setBrightness(15);
   matrix.clear();
-  matrix.writeDigitRaw(0, raw_t);
+  matrix.writeDigitRaw(0, raw_t);  
   matrix.writeDigitRaw(1, raw_o);
   matrix.writeDigitRaw(3, raw_d);
   matrix.writeDigitRaw(4, raw_d);
   matrix.writeDisplay();
   delay(5000);
+}
+
+void display_sfc() {
+  matrix.setBrightness(15);
+  matrix.clear();
+  matrix.writeDigitRaw(1, raw_S);
+  matrix.writeDigitRaw(3, raw_F);
+  matrix.writeDigitRaw(4, raw_C);
+  matrix.writeDisplay();
+  delay(5000);  
 }
 
 void setup() {
@@ -597,10 +653,12 @@ void setup() {
   }
   matrix.begin(0x70);
   // Play an easter-egg message while displaying my name...
+  display_sfc();
   display_todd();
   readBrightnessFromEEPROM();
   matrix.setBrightness(matrixBrightness); // 0-15
-  readSunDownDeltaFromEEPROM();
+  readSunSetDeltaFromEEPROM();
+  readSunSetDimFromEEPROM();
   updateClockTime(true);
   updateCurrentTime(true);
   readAlarmTimeFromEEPROM();
@@ -631,10 +689,12 @@ int32_t secondsBtwDates(ClockTime currentTime, ClockTime alarm) {
 
 void soundAlarmA(bool status) {
   digitalWrite(soundAPin, (status ? LOW : HIGH));
+  soundAlarmAPlaying = status;
 }
 
 void soundAlarmB(bool status) {
   digitalWrite(soundBPin, (status ? LOW : HIGH));
+  soundAlarmBPlaying = status;
 }
 
 uint32_t alarmStartMillis = 0;
@@ -644,7 +704,7 @@ void updateLight() {
   if (!isTimeNow(lastLightUpdate, lightUpdateInterval)) {
     return;
   }
-  if (digitalRead(alarmMasterSwitch) == LOW) return;
+  if (!alarmMasterSwitchEnabled) return;
   ClockTime current = current_clock_time;
   int32_t seconds = secondsBtwDates(current, startTime);
   if ((seconds < 0) || (seconds >= maxTime)) {
@@ -652,6 +712,7 @@ void updateLight() {
       soundAlarmA(false);
       alarmActive = false;
     }
+    snoozeActive = false;
     alarmEnabled = true;
     return;
   }
@@ -666,7 +727,7 @@ void updateLight() {
   }
   if (seconds >= thirtyMinutesInSeconds) {
     linearBrightOfStep(totalDimmerSteps);
-    soundAlarmA(true);
+    if (!snoozeActive) soundAlarmA(true);
     return;
   }
   uint32_t debug_millis = static_cast<uint32_t>(millis() - alarmStartMillis);
@@ -756,44 +817,49 @@ void setAlarm() {
   writeAlarmTimeToEEPROM();
   digitalWrite(AlarmLED, LOW);
   alarmEnabled = true;
+  snoozeActive = false;
 }
 
 uint32_t millisAtStartOfSunSet = 0;
 bool sunSetActive = false;
 void setSunSet() {
-  matrix.print(defaultSunSetDelta);
-  if (defaultSunSetDelta == 0) {
+  setColorForSunSet();
+  matrix.print(sunSetDimLevel);
+  if (sunSetDimLevel == 0) {
     matrix.writeDigitNum(4, 0);
   }
   matrix.writeDisplay();
   sunSetActive = true;
   turnLightOn();
-  waitForButtonDepress(OffButton, HIGH);
+  waitForButtonDepress(rotaryButton, LOW);
   uint32_t modeActive = millis();
   bool normalExit = true;
-  while (debounceDigitalRead(OffButton) == LOW) {
+  while (debounceDigitalRead(rotaryButton) == HIGH) {
     int16_t encoderDelta = encoder->getValue();
     if (encoderDelta != 0)
     {
-      defaultSunSetDelta += encoderDelta;
-      defaultSunSetDelta = max(0, defaultSunSetDelta);
-      matrix.print(defaultSunSetDelta);
-      if (defaultSunSetDelta == 0) matrix.writeDigitNum(4, 0);
+      sunSetDimLevel += encoderDelta;
+      sunSetDimLevel = min(100,max(0, sunSetDimLevel));
+      matrix.print(sunSetDimLevel);
+      if (sunSetDimLevel == 0) matrix.writeDigitNum(4, 0);
       matrix.writeDisplay();
+      setColorForSunSet();
+      turnLightOn();
+      modeActive = millis();
     }
     if (static_cast<uint32_t>(millis() - modeActive) > modeInactivePeriod) {
       normalExit = false;
       break;
     }
   }
-  if (defaultSunSetDelta == 0) {
+  if (sunSetDimLevel == 0) {
     sunSetActive = false;
     turnLightOff();
   }
   if (normalExit) {
-    waitForButtonDepress(OffButton, HIGH);
+    waitForButtonDepress(rotaryButton, LOW);
   }
-  writeSunDownDeltaToEEPROM();
+  writeSunSetDimToEEPROM();
   millisAtStartOfSunSet = millis();
 }
 
@@ -858,26 +924,30 @@ void loop() {
   }
   else if (digitalRead(OffButton) == HIGH && debounceDigitalRead(OffButton) == HIGH) {
     //Serial.println("Detected off button press");
-    if (alarmActive) {
+    if (alarmActive && soundAlarmAPlaying) {
+      soundAlarmA(false);
+      snoozeActive = true;
+    }
+    else if (alarmActive) {
       alarmActive = false;
       alarmEnabled = false;
       soundAlarmA(false);
+      snoozeActive = false;
       turnLightOff();
-      waitForButtonDepress(OffButton, HIGH);
     }
     else if (sunSetActive) {
       sunSetActive = false;
       turnLightOff();
-      waitForButtonDepress(OffButton, HIGH);
     }
     else {
-      setColorForSunDown();
-      setSunSet();
+      // do nothing
     }
+    waitForButtonDepress(OffButton, HIGH);
   }
   else if (digitalRead(rotaryButton) == LOW && debounceDigitalRead(rotaryButton) == LOW) {
     //Serial.println("Detected rotary button press, calling updateBrightness()");
-    updateBrightness();
+    //updateBrightness();
+    setSunSet();
   }
 
   if (digitalRead(alarmMasterSwitch) == LOW) {
@@ -887,6 +957,7 @@ void loop() {
       alarmEnabled = false;
       turnLightOff();
       soundAlarmA(false);
+      snoozeActive = false;
     }
   }
   else {
