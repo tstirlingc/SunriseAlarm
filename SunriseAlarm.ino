@@ -192,7 +192,7 @@ ClickEncoder *encoder;
 #define TimeLED 10
 #define OffButton A0
 #define alarmMasterSwitch 8
-#define rotaryButton 4
+#define RotaryButton 4
 #define soundAPin A1
 #define soundBPin A2
 bool soundAlarmAPlaying = false;
@@ -360,7 +360,7 @@ bool writeSunSetDimToEEPROM() {
 
 
 
-int debounceInterval = 10;
+int debounceInterval = 30;
 int debounceDigitalRead(int pin) {
   int lastResult = digitalRead(pin);
   uint32_t lastRead = millis();
@@ -454,23 +454,17 @@ uint32_t linearBrightOfMilliseconds(uint32_t milliseconds)
 void logisticBrightOfStep(uint16_t step)
 {
   float p = ((float)step) / ((float)totalDimmerSteps);
-//  Serial.print("logisticBrightOfStep p = "); Serial.println(p);
   float L = 1.0;
   float k = 20.0;
   float x0 = 0.5;
   float logisticP = L / (1 + exp(-k * (p - x0)));
-//  Serial.print("logisticBrightOfStep logisticP = "); Serial.println(logisticP);
   uint16_t logisticStep = logisticP * totalDimmerSteps;
-//  Serial.print("logisticBrightOfStep logisticStep =               "); Serial.println(logisticStep);
   linearBrightOfStep(logisticStep);
 }
 
 void logisticBrightOfMilliseconds(uint32_t milliseconds)
 {
   uint32_t stepNumber = ((uint32_t)(totalDimmerSteps) * milliseconds) / millisecondsIn30Minutes;
-//  Serial.print("logisticBrightOfMilliseconds stepNumber =               "); Serial.print(stepNumber);
-//  Serial.print(", totalDimmerSteps="); Serial.print(totalDimmerSteps);
-//  Serial.print(", millisecondsIn30Minutes="); Serial.println(millisecondsIn30Minutes);
   logisticBrightOfStep(stepNumber);
 }
 
@@ -608,28 +602,12 @@ void display_sfc() {
 }
 
 void setup() {
-//  Serial.begin(9600);
-  //Serial.println("Starting setup...");
   Wire.begin();
   RTC.begin();
-  //if (! RTC.isrunning()) {
-  //  Serial.println("RTC is NOT running!");
-  //}
-  //RTC.adjust(DateTime(__DATE__, __TIME__));
-  //RTC.adjust(
-  //  DateTime( 2013,
-  //            03,
-  //            24,
-  //            06,
-  //            14,
-  //            50
-  //          )
-  //);
-  //pinMode(LEDpinA,OUTPUT); digitalWrite(LEDpinA,0);
   pinMode(AlarmButton, INPUT_PULLUP);
   pinMode(TimeButton, INPUT_PULLUP);
   pinMode(alarmMasterSwitch, INPUT_PULLUP);
-  pinMode(rotaryButton, INPUT_PULLUP);
+  pinMode(RotaryButton, INPUT_PULLUP);
   pinMode(OffButton, INPUT);
   pinMode(AlarmLED, OUTPUT);
   pinMode(TimeLED, OUTPUT);
@@ -646,8 +624,6 @@ void setup() {
   encoder = new ClickEncoder(ENCODER_PIN0, ENCODER_PIN1, -1, 4);
   Timer1.initialize(1000);
   Timer1.attachInterrupt(timerIsr);
-  //timer.initialize(timerPeriod);
-  //timer.pwm(LEDpinA, 0); //set up pin 9
   while (!eeprom.isPresent()) {
     delay(1);
   }
@@ -663,10 +639,6 @@ void setup() {
   updateCurrentTime(true);
   readAlarmTimeFromEEPROM();
   updateStartTime();
-  //Serial.println("Finished setup!");
-  //  turnLightOn();
-  //  delay(1000);
-  //  turnLightOff();
 }
 
 int32_t secondsBtwDates(ClockTime currentTime, ClockTime alarm) {
@@ -674,16 +646,6 @@ int32_t secondsBtwDates(ClockTime currentTime, ClockTime alarm) {
   s *= 3600;
   s += (currentTime.minute - alarm.minute) * 60;
   s += (currentTime.second - alarm.second);
-  //Serial.print("Seconds between dates:  currentTime = ");
-  //Serial.print(currentTime.hour);
-  //Serial.print(":");
-  //Serial.print(currentTime.minute);
-  //Serial.print(", startTime = ");
-  //Serial.print(alarm.hour);
-  //Serial.print(":");
-  //Serial.print(alarm.minute);
-  //Serial.print(", seconds = ");
-  //Serial.println(s);
   return ( s );
 }
 
@@ -700,7 +662,7 @@ void soundAlarmB(bool status) {
 uint32_t alarmStartMillis = 0;
 const unsigned lightUpdateInterval = 50;
 uint32_t lastLightUpdate = millis();
-void updateLight() {
+void updateAlarmLight() {
   if (!isTimeNow(lastLightUpdate, lightUpdateInterval)) {
     return;
   }
@@ -731,7 +693,6 @@ void updateLight() {
     return;
   }
   uint32_t debug_millis = static_cast<uint32_t>(millis() - alarmStartMillis);
-//  Serial.print("updateLight: debug_millis =               "); Serial.println(debug_millis);
   logisticBrightOfMilliseconds(debug_millis);
 }
 
@@ -746,21 +707,34 @@ void updateAlarm(int16_t delta) {
   updateTimeDisplay(alarmTime, true, alarmMasterSwitchEnabled);
 }
 
-
-void setTime() {
+void changeState_Clock_to_setTime()
+{
   analogWrite(TimeLED, matrixBrightness * 255 / 16 + 15);
-  DateTime currentTime = RTC.now();
-  ClockTime t(currentTime);
   display_Cloc();
   delay(1000);
+  DateTime currentTime = RTC.now();
+  ClockTime t(currentTime);
   updateTimeDisplay(t, true, alarmMasterSwitchEnabled);
   waitForButtonDepress(TimeButton, LOW);
+}
+
+void changeState_setTime_to_Clock()
+{
+  updateCurrentTime(true);
+  digitalWrite(TimeLED, LOW);
+}
+
+void setTimeState() {
+  chnageState_Clock_to_setTime();
+  
   uint32_t modeActive = millis();
   bool normalExit = true;
-  while (debounceDigitalRead(TimeButton) == HIGH) {
+  while (!timeButtonPushed()) {
     int16_t encoderDelta = encoder->getValue();
-    updateTime(t, encoderDelta);
-    modeActive = millis();
+    if (encoderDelta != 0) {
+      updateTime(t, encoderDelta);
+      modeActive = millis();
+    }
     if (static_cast<uint32_t>(millis() - modeActive) > modeInactivePeriod) {
       normalExit = false;
       break;
@@ -779,28 +753,45 @@ void setTime() {
               0
             )
   );
-  //updateClockTime(true);
-  // Avoid talking to RTC:
   synchronized_clock_time = t;
   synchronized_clock_millis = millis();
   current_clock_time = synchronized_clock_time;
-  updateCurrentTime(true);
-  digitalWrite(TimeLED, LOW);
+
+  changeState_setTime_to_Clock();
 }
 
-void setAlarm() {
+void changeState_Clock_to_setAlarm()
+{
   analogWrite(AlarmLED, matrixBrightness * 255 / 16 + 1);
   display_ALAr();
   delay(1000);
   updateTimeDisplay(alarmTime, true, alarmMasterSwitchEnabled);
-  waitForButtonDepress(AlarmButton, LOW);
+  waitForButtonDepress(AlarmButton, LOW);  
+}
+
+void changeState_setAlarm_to_Clock()
+{
+  updateStartTime();
+  writeAlarmTimeToEEPROM();
+  
+  updateCurrentTime(true);
+  updateTimeDisplay(current_clock_time, false, alarmMasterSwitchEnabled);
+  digitalWrite(AlarmLED, LOW);
+  alarmEnabled = true;
+  snoozeActive = false;
+}
+
+void setAlarmState() {
+  changeState_Clock_to_setAlarm();
+  
   uint32_t modeActive = millis();
   bool normalExit = true;
-  while (debounceDigitalRead(AlarmButton) == HIGH) {
+  while (!alarmButtonPushed()) {
     int16_t encoderDelta = encoder->getValue();
-    //Serial.print("encoder Delta = "); Serial.println(encoderDelta);
-    updateAlarm(encoderDelta);
-    modeActive = millis();
+    if (encoderDelta != 0) {
+      updateAlarm(encoderDelta);
+      modeActive = millis();
+    }
     if (static_cast<uint32_t>(millis() - modeActive) > modeInactivePeriod) {
       normalExit = false;
       break;
@@ -809,20 +800,12 @@ void setAlarm() {
   if (normalExit) {
     waitForButtonDepress(AlarmButton, LOW);
   }
-  updateStartTime();
-  //updateTimeDisplay(startTime,true,alarmMasterSwitchEnabled);
-  //delay(2000);
-  updateCurrentTime(true);
-  updateTimeDisplay(current_clock_time, false, alarmMasterSwitchEnabled);
-  writeAlarmTimeToEEPROM();
-  digitalWrite(AlarmLED, LOW);
-  alarmEnabled = true;
-  snoozeActive = false;
+  
+  changeState_setAlarm_to_Clock();
 }
 
-uint32_t millisAtStartOfSunSet = 0;
-bool sunSetActive = false;
-void setSunSet() {
+void changeState_Clock_to_setSunset()
+{
   setColorForSunSet();
   matrix.print(sunSetDimLevel);
   if (sunSetDimLevel == 0) {
@@ -831,10 +814,26 @@ void setSunSet() {
   matrix.writeDisplay();
   sunSetActive = true;
   turnLightOn();
-  waitForButtonDepress(rotaryButton, LOW);
+  waitForButtonDepress(RotaryButton, LOW);
+}
+
+void changeState_setSunset_to_Clock()
+{
+  if (sunSetDimLevel == 0) {
+    sunSetActive = false;
+    turnLightOff();
+  }
+  writeSunSetDimToEEPROM();
+}
+
+uint32_t millisAtStartOfSunSet = 0;
+bool sunSetActive = false;
+void setSunSetState() {
+  changeState_Clock_to_setSunset();
+  
   uint32_t modeActive = millis();
   bool normalExit = true;
-  while (debounceDigitalRead(rotaryButton) == HIGH) {
+  while (!rotaryButtonPushed()) {
     int16_t encoderDelta = encoder->getValue();
     if (encoderDelta != 0)
     {
@@ -852,22 +851,19 @@ void setSunSet() {
       break;
     }
   }
-  if (sunSetDimLevel == 0) {
-    sunSetActive = false;
-    turnLightOff();
-  }
   if (normalExit) {
-    waitForButtonDepress(rotaryButton, LOW);
+    waitForButtonDepress(RotaryButton, LOW);
   }
-  writeSunSetDimToEEPROM();
   millisAtStartOfSunSet = millis();
+  
+  changeState_setSunset_to_Clock();
 }
 
 
 uint32_t lastSunSetUpdate = millis();
 unsigned sunSetUpdateInterval = 5;
 int lastSunSetLightLevel = 0;
-void updateSunSet() {
+void updateSunsetLight() {
   if (!sunSetActive) {
     return;
   }
@@ -889,41 +885,28 @@ void updateSunSet() {
   }
 }
 
-void updateBrightness()
+
+bool alarmButtonPushed()
 {
-  uint32_t modeActive = millis();
-  bool normalExit = true;
-  waitForButtonDepress(rotaryButton, LOW);
-  while (debounceDigitalRead(rotaryButton) == HIGH) {
-    int16_t encoderDelta = encoder->getValue();
-    if (encoderDelta != 0) {
-      int delta = (encoderDelta > 0 ? 1 : -1);
-      matrixBrightness = max(min(15, matrixBrightness + delta), 0);
-      matrix.setBrightness(matrixBrightness); // 0-15
-      modeActive = millis();
-    }
-    if (static_cast<uint32_t>(millis() - modeActive) > modeInactivePeriod) {
-      normalExit = false;
-      break;
-    }
-  }
-  if (normalExit) {
-    waitForButtonDepress(rotaryButton, LOW);
-  }
-  writeBrightnessToEEPROM();
+  return (digitalRead(AlarmButton) == LOW && debounceDigitalRead(AlarmButton) == LOW);
 }
 
-void loop() {
-  if (digitalRead(AlarmButton) == LOW && debounceDigitalRead(AlarmButton) == LOW) {
-    //Serial.println("Detected alarm button press, calling setAlarm()");
-    setAlarm();
-  }
-  else if (digitalRead(TimeButton) == LOW && debounceDigitalRead(TimeButton) == LOW) {
-    //Serial.println("Detected time button press, calling setTime()");
-    setTime();
-  }
-  else if (digitalRead(OffButton) == HIGH && debounceDigitalRead(OffButton) == HIGH) {
-    //Serial.println("Detected off button press");
+bool timeButtonPushed()
+{
+  return (digitalRead(TimeButton) == LOW && debounceDigitalRead(TimeButton) == LOW);
+}
+bool offButtonPushed()
+{
+  return (digitalRead(OffButton) == HIGH && debounceDigitalRead(OffButton) == HIGH);
+}
+
+bool rotaryButtonPushed()
+{
+  return (digitalRead(RotaryButton) == LOW && debounceDigitalRead(RotaryButton) == LOW);
+}
+
+void turnOffLightsDueToOffButton()
+{
     if (alarmActive && soundAlarmAPlaying) {
       soundAlarmA(false);
       snoozeActive = true;
@@ -943,13 +926,10 @@ void loop() {
       // do nothing
     }
     waitForButtonDepress(OffButton, HIGH);
-  }
-  else if (digitalRead(rotaryButton) == LOW && debounceDigitalRead(rotaryButton) == LOW) {
-    //Serial.println("Detected rotary button press, calling updateBrightness()");
-    //updateBrightness();
-    setSunSet();
-  }
+}
 
+void processAlarmMasterSwitch()
+{
   if (digitalRead(alarmMasterSwitch) == LOW) {
     alarmMasterSwitchEnabled = false;
     if (alarmEnabled && alarmActive) {
@@ -963,13 +943,19 @@ void loop() {
   else {
     alarmMasterSwitchEnabled = true;
   }
-  updateLight();
+}
+
+void loop() {
+  if (alarmButtonPushed()) setAlarmState();
+  else if (timeButtonPushed()) setTimeState();
+  else if (offButtonPushed()) turnOffLightsDueToOffButton();
+  else if (rotaryButtonPushed()) setSunSetState();
+
+  processAlarmMasterSwitch();
+  updateAlarmLight();
   updateCurrentTime();
   updateClockTime();
-  updateSunSet();
-  // DONE 2013-03-30:  Add a feature so Fwd and Rew buttons adjust the display brightness
-  // DONE 2013-03-30:  Add a feature so the OffButton can be used for SunDown mode when the SunRise mode is not currently active.
-  //        Turn on light (ramp up quickly but not instantly) then slowly turn off after 15 minutes
+  updateSunsetLight();
 }
 
 } // namespace SunriseAlarm
@@ -984,3 +970,4 @@ void loop()
   SunriseAlarm::loop();
 }
 
+void 
