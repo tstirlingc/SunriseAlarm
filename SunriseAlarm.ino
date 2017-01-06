@@ -16,7 +16,7 @@
 
 // 2013-04-06 TODO:  Add a temperature sensor to the lamp and if it exceeds a particular temperature, then turn it off or down
 // 2013-04-06 TODO:  Add three LEDs inside the enclosure to indicate which mode you are in.  E.g. green for alarm, blue for time, and red for sundown.
-// 2013-04-06 DONE 2013-04-06:  Store SunSet alarm setting in EEPROM
+// 2013-04-06 DONE 2013-04-06:  Store Sunset alarm setting in EEPROM
 // 2013-04-06 DONE 2013-04-06:  Store brigness level in EEPROM
 // 2013-04-06 DONE 2013-04-06:  Change Alarm, Time, and Sundown modes so they will automatically exit the mode after 60 seconds of inactivity.
 // 2013-04-01 TODO:  Box enclosure:  Consider a OLED display behind a thin veneer of wood or paper so that the display can print
@@ -27,7 +27,7 @@
 // 2013-04-01 TODO:  Change "OffButton" to allow you to see how much time is left and reset it
 // 2013-04-01 TODO:  Rework SunRISE alarm to match the way the SunSET alarm works.  Basically, use millis() instead of clock
 // DONE 2013-03-29:  Add alarm & time mode so you don't have to hold down the buttons.
-// DONE 2013-03-30:  Add SunSet mode
+// DONE 2013-03-30:  Add Sunset mode
 // WONTFIX 2013-03-29:  Add AM/PM indicator
 // DONE 2013-03-29:  Add method to toggle alarm on/off
 // DONE 2013-03-28:  Add hardware buttons for setting time and alarm
@@ -217,8 +217,8 @@ const int forward_delay = 15;
 const int rewind_delay = 150;
 const uint32_t millisecondsIn30Minutes = 1800000;
 
-int defaultSunSetDelta = 10; // minutes
-int sunSetDimLevel = 100; // 100 = max bright, 0 = off
+int defaultSunsetDelta = 10; // minutes
+int sunsetDimLevel = 100; // 100 = max bright, 0 = off
 
 const uint32_t modeInactivePeriod = 30000; // 30 seconds
 
@@ -274,6 +274,38 @@ void timerIsr() {
   encoder->service();
 }
 
+int debounceInterval = 30;
+int debounceDigitalRead(int pin) {
+  int lastResult = digitalRead(pin);
+  uint32_t lastRead = millis();
+  while (static_cast<uint32_t>(millis() - lastRead) < debounceInterval) {
+    int result = digitalRead(pin);
+    if (result != lastResult) {
+      lastResult = result;
+      lastRead = millis();
+    }
+  }
+  return lastResult;
+}
+
+bool alarmButtonPushed()
+{
+  return (digitalRead(AlarmButton) == LOW && debounceDigitalRead(AlarmButton) == LOW);
+}
+
+bool timeButtonPushed()
+{
+  return (digitalRead(TimeButton) == LOW && debounceDigitalRead(TimeButton) == LOW);
+}
+bool offButtonPushed()
+{
+  return (digitalRead(OffButton) == HIGH && debounceDigitalRead(OffButton) == HIGH);
+}
+
+bool rotaryButtonPushed()
+{
+  return (digitalRead(RotaryButton) == LOW && debounceDigitalRead(RotaryButton) == LOW);
+}
 
 bool readAlarmTimeFromEEPROM() {
   if (eeprom.isPresent()) {
@@ -318,40 +350,40 @@ bool writeBrightnessToEEPROM() {
 }
 
 
-bool readSunSetDeltaFromEEPROM() {
+bool readSunsetDeltaFromEEPROM() {
   if (eeprom.isPresent()) {
     char buf[1];
     eeprom.ReadMem(sunset_address, buf, 1);
-    defaultSunSetDelta = static_cast<int>(buf[0]);
+    defaultSunsetDelta = static_cast<int>(buf[0]);
     return true;
   }
   return false;
 }
 
-bool writeSunSetDeltaToEEPROM() {
+bool writeSunsetDeltaToEEPROM() {
   if (eeprom.isPresent()) {
     char myBuf[1];
-    myBuf[0] = static_cast<char>(defaultSunSetDelta);
+    myBuf[0] = static_cast<char>(defaultSunsetDelta);
     eeprom.WriteMem(sunset_address, myBuf, 1);
     return true;
   }
   return false;
 }
 
-bool readSunSetDimFromEEPROM() {
+bool readSunsetDimFromEEPROM() {
   if (eeprom.isPresent()) {
     char buf[1];
     eeprom.ReadMem(sunset_dim_address, buf, 1);
-    sunSetDimLevel = static_cast<int>(buf[0]);
+    sunsetDimLevel = static_cast<int>(buf[0]);
     return true;
   }
   return false;
 }
 
-bool writeSunSetDimToEEPROM() {
+bool writeSunsetDimToEEPROM() {
   if (eeprom.isPresent()) {
     char myBuf[1];
-    myBuf[0] = static_cast<char>(sunSetDimLevel);
+    myBuf[0] = static_cast<char>(sunsetDimLevel);
     eeprom.WriteMem(sunset_dim_address, myBuf, 1);
     return true;
   }
@@ -360,19 +392,6 @@ bool writeSunSetDimToEEPROM() {
 
 
 
-int debounceInterval = 30;
-int debounceDigitalRead(int pin) {
-  int lastResult = digitalRead(pin);
-  uint32_t lastRead = millis();
-  while (static_cast<uint32_t>(millis() - lastRead) < debounceInterval) {
-    int result = digitalRead(pin);
-    if (result != lastResult) {
-      lastResult = result;
-      lastRead = millis();
-    }
-  }
-  return lastResult;
-}
 
 uint8_t computeMinRGBLevel(uint8_t* RGB)
 {
@@ -396,11 +415,11 @@ const uint8_t sunRiseDimLevel = 90; // Percentage of max [0, 100]
 uint8_t minRGBLevel = computeMinRGBLevel(targetColor);
 uint16_t totalDimmerSteps = minRGBLevel * NUM_LED;
 
-void setColorForSunSet()
+void setColorForSunset()
 {
   for (uint8_t i = 0 ; i < 3 ; ++i)
   {
-    targetColor[i] = (sunSetDimLevel*1.0/100.0)*(1.0*candleLight[i]);
+    targetColor[i] = (sunsetDimLevel*1.0/100.0)*(1.0*candleLight[i]);
   }
   minRGBLevel = computeMinRGBLevel(targetColor);
   totalDimmerSteps = minRGBLevel * NUM_LED;
@@ -633,8 +652,8 @@ void setup() {
   display_todd();
   readBrightnessFromEEPROM();
   matrix.setBrightness(matrixBrightness); // 0-15
-  readSunSetDeltaFromEEPROM();
-  readSunSetDimFromEEPROM();
+  readSunsetDeltaFromEEPROM();
+  readSunsetDimFromEEPROM();
   updateClockTime(true);
   updateCurrentTime(true);
   readAlarmTimeFromEEPROM();
@@ -712,9 +731,6 @@ void changeState_Clock_to_setTime()
   analogWrite(TimeLED, matrixBrightness * 255 / 16 + 15);
   display_Cloc();
   delay(1000);
-  DateTime currentTime = RTC.now();
-  ClockTime t(currentTime);
-  updateTimeDisplay(t, true, alarmMasterSwitchEnabled);
   waitForButtonDepress(TimeButton, LOW);
 }
 
@@ -725,7 +741,11 @@ void changeState_setTime_to_Clock()
 }
 
 void setTimeState() {
-  chnageState_Clock_to_setTime();
+  changeState_Clock_to_setTime();
+
+  DateTime currentTime = RTC.now();
+  ClockTime t(currentTime);
+  updateTimeDisplay(t, true, alarmMasterSwitchEnabled);
   
   uint32_t modeActive = millis();
   bool normalExit = true;
@@ -804,31 +824,31 @@ void setAlarmState() {
   changeState_setAlarm_to_Clock();
 }
 
+bool sunsetActive = false;
 void changeState_Clock_to_setSunset()
 {
-  setColorForSunSet();
-  matrix.print(sunSetDimLevel);
-  if (sunSetDimLevel == 0) {
+  setColorForSunset();
+  matrix.print(sunsetDimLevel);
+  if (sunsetDimLevel == 0) {
     matrix.writeDigitNum(4, 0);
   }
   matrix.writeDisplay();
-  sunSetActive = true;
+  sunsetActive = true;
   turnLightOn();
   waitForButtonDepress(RotaryButton, LOW);
 }
 
 void changeState_setSunset_to_Clock()
 {
-  if (sunSetDimLevel == 0) {
-    sunSetActive = false;
+  if (sunsetDimLevel == 0) {
+    sunsetActive = false;
     turnLightOff();
   }
-  writeSunSetDimToEEPROM();
+  writeSunsetDimToEEPROM();
 }
 
-uint32_t millisAtStartOfSunSet = 0;
-bool sunSetActive = false;
-void setSunSetState() {
+uint32_t millisAtStartOfSunset = 0;
+void setSunsetState() {
   changeState_Clock_to_setSunset();
   
   uint32_t modeActive = millis();
@@ -837,12 +857,12 @@ void setSunSetState() {
     int16_t encoderDelta = encoder->getValue();
     if (encoderDelta != 0)
     {
-      sunSetDimLevel += encoderDelta;
-      sunSetDimLevel = min(100,max(0, sunSetDimLevel));
-      matrix.print(sunSetDimLevel);
-      if (sunSetDimLevel == 0) matrix.writeDigitNum(4, 0);
+      sunsetDimLevel += encoderDelta;
+      sunsetDimLevel = min(100,max(0, sunsetDimLevel));
+      matrix.print(sunsetDimLevel);
+      if (sunsetDimLevel == 0) matrix.writeDigitNum(4, 0);
       matrix.writeDisplay();
-      setColorForSunSet();
+      setColorForSunset();
       turnLightOn();
       modeActive = millis();
     }
@@ -854,29 +874,29 @@ void setSunSetState() {
   if (normalExit) {
     waitForButtonDepress(RotaryButton, LOW);
   }
-  millisAtStartOfSunSet = millis();
+  millisAtStartOfSunset = millis();
   
   changeState_setSunset_to_Clock();
 }
 
 
-uint32_t lastSunSetUpdate = millis();
-unsigned sunSetUpdateInterval = 5;
-int lastSunSetLightLevel = 0;
+uint32_t lastSunsetUpdate = millis();
+unsigned sunsetUpdateInterval = 5;
+int lastSunsetLightLevel = 0;
 void updateSunsetLight() {
-  if (!sunSetActive) {
+  if (!sunsetActive) {
     return;
   }
-  if (!isTimeNow(lastSunSetUpdate, sunSetUpdateInterval)) {
+  if (!isTimeNow(lastSunsetUpdate, sunsetUpdateInterval)) {
     return;
   }
   uint32_t currentMillis = millis();
-  uint32_t delta = static_cast<uint32_t>(currentMillis - millisAtStartOfSunSet);
-  uint32_t finalMillis = defaultSunSetDelta;
+  uint32_t delta = static_cast<uint32_t>(currentMillis - millisAtStartOfSunset);
+  uint32_t finalMillis = defaultSunsetDelta;
   finalMillis *= 60;
   finalMillis *= 1000;
   if (delta > finalMillis) {
-    sunSetActive = false;
+    sunsetActive = false;
     linearBrightOfStep(0);
   }
   else {
@@ -886,24 +906,6 @@ void updateSunsetLight() {
 }
 
 
-bool alarmButtonPushed()
-{
-  return (digitalRead(AlarmButton) == LOW && debounceDigitalRead(AlarmButton) == LOW);
-}
-
-bool timeButtonPushed()
-{
-  return (digitalRead(TimeButton) == LOW && debounceDigitalRead(TimeButton) == LOW);
-}
-bool offButtonPushed()
-{
-  return (digitalRead(OffButton) == HIGH && debounceDigitalRead(OffButton) == HIGH);
-}
-
-bool rotaryButtonPushed()
-{
-  return (digitalRead(RotaryButton) == LOW && debounceDigitalRead(RotaryButton) == LOW);
-}
 
 void turnOffLightsDueToOffButton()
 {
@@ -918,8 +920,8 @@ void turnOffLightsDueToOffButton()
       snoozeActive = false;
       turnLightOff();
     }
-    else if (sunSetActive) {
-      sunSetActive = false;
+    else if (sunsetActive) {
+      sunsetActive = false;
       turnLightOff();
     }
     else {
@@ -949,7 +951,7 @@ void loop() {
   if (alarmButtonPushed()) setAlarmState();
   else if (timeButtonPushed()) setTimeState();
   else if (offButtonPushed()) turnOffLightsDueToOffButton();
-  else if (rotaryButtonPushed()) setSunSetState();
+  else if (rotaryButtonPushed()) setSunsetState();
 
   processAlarmMasterSwitch();
   updateAlarmLight();
@@ -970,4 +972,4 @@ void loop()
   SunriseAlarm::loop();
 }
 
-void 
+
