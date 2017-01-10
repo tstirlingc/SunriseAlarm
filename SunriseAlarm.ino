@@ -15,6 +15,19 @@
 #include "Adafruit_Soundboard.h"
 #include "ClockTime.h"
 
+#define AlarmButton 7
+#define AlarmLED 5
+#define TimeButton 9
+#define TimeLED 10
+#define OffButton A0
+#define alarmMasterSwitch 8
+#define RotaryButton 4
+#define soundAPin A1
+#define soundBPin A2
+
+#include "Inputs.hpp"
+#include "ClockStates.hpp"
+
 int sunsetDimLevel = 100; // 100 = max bright, 0 = off
 #define NUM_LED 32
 #include "LightColor.h"
@@ -49,15 +62,6 @@ ClickEncoder *encoder;
 #define ENCODER_PIN1 12
 
 
-#define AlarmButton 7
-#define AlarmLED 5
-#define TimeButton 9
-#define TimeLED 10
-#define OffButton A0
-#define alarmMasterSwitch 8
-#define RotaryButton 4
-#define soundAPin A1
-#define soundBPin A2
 bool soundAlarmAPlaying = false;
 bool soundAlarmBPlaying = false;
 
@@ -155,24 +159,8 @@ int debounceDigitalRead(int pin) {
   return lastResult;
 }
 
-bool alarmButtonPushed()
-{
-  return (digitalRead(AlarmButton) == LOW && debounceDigitalRead(AlarmButton) == LOW);
-}
 
-bool timeButtonPushed()
-{
-  return (digitalRead(TimeButton) == LOW && debounceDigitalRead(TimeButton) == LOW);
-}
-bool offButtonPushed()
-{
-  return (digitalRead(OffButton) == HIGH && debounceDigitalRead(OffButton) == HIGH);
-}
 
-bool rotaryButtonPushed()
-{
-  return (digitalRead(RotaryButton) == LOW && debounceDigitalRead(RotaryButton) == LOW);
-}
 
 bool readAlarmTimeFromEEPROM() {
   if (eeprom.isPresent()) {
@@ -597,26 +585,9 @@ void setTimeState() {
   changeState_setTime_to_Clock();
 }
 
-void changeState_Clock_to_setTime()
-{
-  analogWrite(TimeLED, matrixBrightness * 255 / 16 + 15);
-  display_Cloc();
-  delay(1000);
-  waitForButtonDepress(TimeButton, LOW);
-  setTimeState();
-}
 
 
 
-void changeState_Clock_to_setAlarm()
-{
-  analogWrite(AlarmLED, matrixBrightness * 255 / 16 + 1);
-  display_ALAr();
-  delay(1000);
-  updateTimeDisplay(alarmTime, true, alarmMasterSwitchEnabled);
-  waitForButtonDepress(AlarmButton, LOW);  
-  setAlarmState();
-}
 
 void changeState_setAlarm_to_Clock()
 {
@@ -652,22 +623,6 @@ void setAlarmState() {
   
   changeState_setAlarm_to_Clock();
 }
-
-bool sunsetActive = false;
-void changeState_Clock_to_setSunset()
-{
-  setColorForSunset();
-  matrix.print(sunsetDimLevel);
-  if (sunsetDimLevel == 0) {
-    matrix.writeDigitNum(4, 0);
-  }
-  matrix.writeDisplay();
-  sunsetActive = true;
-  turnLightOn();
-  waitForButtonDepress(RotaryButton, LOW);
-  setSunsetState();
-}
-
 
 
 uint32_t millisAtStartOfSunset = 0;
@@ -729,28 +684,6 @@ void updateSunsetLight() {
 
 
 
-void turnOffLightsDueToOffButton()
-{
-    if (alarmActive && soundAlarmAPlaying) {
-      soundAlarmA(false);
-      snoozeActive = true;
-    }
-    else if (alarmActive) {
-      alarmActive = false;
-      alarmEnabled = false;
-      soundAlarmA(false);
-      snoozeActive = false;
-      turnLightOff();
-    }
-    else if (sunsetActive) {
-      sunsetActive = false;
-      turnLightOff();
-    }
-    else {
-      // do nothing
-    }
-    waitForButtonDepress(OffButton, HIGH);
-}
 
 void processAlarmMasterSwitch()
 {
@@ -769,67 +702,6 @@ void processAlarmMasterSwitch()
   }
 }
 
-void clockState() {
-  if (alarmButtonPushed()) changeState_Clock_to_setAlarm();
-  else if (timeButtonPushed()) changeState_Clock_to_setTime();
-  else if (offButtonPushed()) turnOffLightsDueToOffButton();
-  else if (rotaryButtonPushed()) changeState_Clock_to_setSunset();
-
-  processAlarmMasterSwitch();
-  updateAlarmLight();
-  updateCurrentTime();
-  updateClockTime();
-  updateSunsetLight();
-}
-
-// States of the alarm clock:
-// CE:  clockEState with alarm enabled through slider switch
-//      Slider -> CD
-//      AlarmButton -> AE
-//      TimeButton -> TE
-//      RotaryButton -> SE
-//      time -> CEA
-// CD:  clockDState with alarm disabled
-//      Slider -> CE
-//      AlarmButton -> AD
-//      TimeButton -> TD
-//      RotaryButton -> SD
-// AE:  setAlarmEState with alarm enabled
-//      AlarmButton -> CE
-//      time -> CE
-// AD:  setAlarmDState with alarm disabled
-//      AlarmButton -> CD
-//      time -> CD
-// TE:  setTimeEState with alarm enabled
-//      TimeButton -> CE
-//      time -> CE
-// TD:  setTimeDState with alarm disabled
-//      TimeButton -> CD
-//      time -> CD
-// SE:  setSundownEState with alarm enabled
-//      RotaryButton with brightness=0 -> CE
-//      RotaryButton with brightness>0 -> CES
-// SD:  setSundownDState with alarm disabled
-//      RotaryButton with brightness=0 -> CD
-//      RotaryButton with brightness>0 -> CDS
-// CEA:  clockAlarmEState with alarm enabled
-//      TouchSensor -> CE
-//      time -> CE
-//      Slider -> CD
-//      AlarmButton -> SE
-//      TimeButton -> TE
-//      RotaryButton -> SE
-//      time -> CEAM
-// CEAM:  clockAlarmMusicEState with alarm enabled
-//      TouchSensor -> CEA
-//      time -> CE
-//      Slider -> CD
-//      AlarmButton -> SE
-//      TimeButton -> TE
-//      RotaryButton -> SE
-//      
-// CES:  clockSunsetEState with alarm enabled
-// CDS:  clockSunsetDState with alarm disabled
 
 void changeState_setSunset_to_Clock()
 {
