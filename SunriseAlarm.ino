@@ -13,6 +13,11 @@
 #include <Adafruit_NeoPixel.h>
 #include <SoftwareSerial.h>
 #include "Adafruit_Soundboard.h"
+#include "ClockTime.h"
+
+int sunsetDimLevel = 100; // 100 = max bright, 0 = off
+#define NUM_LED 32
+#include "LightColor.h"
 
 // 2013-04-06 TODO:  Add a temperature sensor to the lamp and if it exceeds a particular temperature, then turn it off or down
 // 2013-04-06 TODO:  Add three LEDs inside the enclosure to indicate which mode you are in.  E.g. green for alarm, blue for time, and red for sundown.
@@ -38,148 +43,6 @@
 
 namespace SunriseAlarm {
 
-struct ClockTime {
-  ClockTime() : hour(0), minute(0), second(0) {}
-  ClockTime(int h, int m) : hour(h), minute(m), second(0) {}
-  ClockTime(int h, int m, int s) : hour(h), minute(m), second(s) {}
-  ClockTime(DateTime dt) : hour(dt.hour()), minute(dt.minute()), second(dt.second()) {}
-  ClockTime(const ClockTime & ct) : hour(ct.hour), minute(ct.minute), second(ct.second) {}
-
-  ClockTime operator++(int) {
-    ClockTime result(*this);
-    ++this->minute;
-    fixTime();
-    return result;
-  }
-
-  ClockTime operator+=(int16_t delta)
-  {
-    ClockTime result(*this);
-    this->minute += delta;
-    fixTime();
-    return result;
-  }
-
-  ClockTime operator-=(int16_t delta)
-  {
-    ClockTime result(*this);
-    this->minute -= delta;
-    fixTime();
-    return result;
-  }
-
-  ClockTime operator--(int) {
-    ClockTime result(*this);
-    --this->minute;
-    fixTime();
-    return result;
-  }
-
-  ClockTime & operator++() {
-    ++this->minute;
-    fixTime();
-    return *this;
-  }
-
-  ClockTime & operator--() {
-    --this->minute;
-    fixTime();
-    return *this;
-  }
-
-  void fixTime() {
-    while (this->second > 59) {
-      ++this->minute;
-      this->second -= 60;
-    }
-    while (this->second < 0) {
-      --this->minute;
-      this->second += 60;
-    }
-
-    while (this->minute > 59) {
-      ++this->hour;
-      this->minute -= 60;
-    }
-    while (this->minute < 0) {
-      --this->hour;
-      this->minute += 60;
-    }
-
-    while (this->hour > 23) {
-      this->hour -= 24;
-    }
-    while (this->hour < 0) {
-      this->hour += 24;
-    }
-  }
-
-  int hour;
-  int minute;
-  int second;
-};
-
-
-ClockTime operator+(ClockTime lhs, int minutes) {
-  lhs.minute += minutes;
-  lhs.fixTime();
-  return lhs;
-}
-
-
-bool operator<(ClockTime lhs, ClockTime rhs) {
-  if (lhs.hour < rhs.hour) {
-    return true;
-  }
-  if (lhs.hour > rhs.hour) {
-    return false;
-  }
-  // lhs.hour == rhs.hour
-  if (lhs.minute < rhs.minute) {
-    return true;
-  }
-  if (lhs.minute > rhs.minute) {
-    return false;
-  }
-  // lhs.minute == rhs.minute
-  if (lhs.second < rhs.second) {
-    return true;
-  }
-  return false;
-}
-
-bool operator<=(ClockTime lhs, ClockTime rhs) {
-  if (lhs.hour < rhs.hour) {
-    return true;
-  }
-  if (lhs.hour > rhs.hour) {
-    return false;
-  }
-  // lhs.hour == rhs.hour
-  if (lhs.minute < rhs.minute) {
-    return true;
-  }
-  if (lhs.minute > rhs.minute) {
-    return false;
-  }
-  // lhs.minute == rhs.minute
-  if (lhs.second <= rhs.second) {
-    return true;
-  }
-  return false;
-}
-
-bool operator==(ClockTime lhs, ClockTime rhs) {
-  if ((lhs.hour == rhs.hour) && (lhs.minute == rhs.minute) && (lhs.second == rhs.second)) {
-    return true;
-  }
-  return false;
-}
-
-bool operator!=(ClockTime lhs, ClockTime rhs) {
-  return !(lhs == rhs);
-}
-
 
 ClickEncoder *encoder;
 #define ENCODER_PIN0 11
@@ -198,7 +61,6 @@ ClickEncoder *encoder;
 bool soundAlarmAPlaying = false;
 bool soundAlarmBPlaying = false;
 
-#define NUM_LED 32
 #define LED_PIN 6
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LED, LED_PIN, NEO_GRB + NEO_KHZ800);
 
@@ -218,7 +80,6 @@ const int rewind_delay = 150;
 const uint32_t millisecondsIn30Minutes = 1800000;
 
 int defaultSunsetDelta = 10; // minutes
-int sunsetDimLevel = 100; // 100 = max bright, 0 = off
 
 const uint32_t modeInactivePeriod = 30000; // 30 seconds
 
@@ -234,6 +95,12 @@ const int sunset_dim_address = 8;
 
 Adafruit_7segment matrix = Adafruit_7segment();
 int matrixBrightness = 0;
+
+// Declarations:
+void clockState();
+void setAlarmState();
+void setSunsetState();
+void changeState_setSunset_to_Clock();
 
 // seven segment display:
 //      A
@@ -392,49 +259,6 @@ bool writeSunsetDimToEEPROM() {
 
 
 
-
-uint8_t computeMinRGBLevel(uint8_t* RGB)
-{
-  uint8_t myRGB[3] = {255, 255, 255};
-  for (uint8_t i = 0 ; i < 3 ; ++i)
-  {
-    if (RGB[i] > 0) myRGB[i] = RGB[i];
-  }
-  return min(min(myRGB[0], myRGB[1]), myRGB[2]);
-}
-
-
-const uint8_t candleLight[3] = {255, 147, 41};
-const uint8_t sunLight[3] = {255, 255, 255};
-const uint8_t tungsten100W[3] = {255, 214, 170}; 
-const uint8_t halogen[3] = {255, 241, 224};
-const uint8_t testingLight[3] = {50, 0, 0};
-uint8_t targetColor[3] = {255, 0, 0};
-const uint8_t sunRiseDimLevel = 90; // Percentage of max [0, 100]
-
-uint8_t minRGBLevel = computeMinRGBLevel(targetColor);
-uint16_t totalDimmerSteps = minRGBLevel * NUM_LED;
-
-void setColorForSunset()
-{
-  for (uint8_t i = 0 ; i < 3 ; ++i)
-  {
-    targetColor[i] = (sunsetDimLevel*1.0/100.0)*(1.0*candleLight[i]);
-  }
-  minRGBLevel = computeMinRGBLevel(targetColor);
-  totalDimmerSteps = minRGBLevel * NUM_LED;
-}
-
-void setColorForSunRise()
-{
-  for (uint8_t i = 0 ; i < 3 ; ++i)
-  {
-    targetColor[i] = (sunRiseDimLevel*1.0/100.0)*(1.0*tungsten100W[i]);
-  }
-  minRGBLevel = computeMinRGBLevel(targetColor);
-  totalDimmerSteps = minRGBLevel * NUM_LED;
-}
-
 uint16_t currentDimmerStep = 0;
 uint8_t baseRGBColor[3] = {0u, 0u, 0u};
 uint8_t highRGBColor[3] = {0u, 0u, 0u};
@@ -567,7 +391,8 @@ const uint32_t clockUpdateInterval = 24 * 60 * 60 * 1000; // every 24 hours
 uint32_t lastClockUpdate = millis();
 void updateClockTime(bool force = false) {
   if (force || isTimeNow(lastClockUpdate, clockUpdateInterval)) {
-    synchronized_clock_time = ClockTime(RTC.now());
+    DateTime dt = RTC.now();
+    synchronized_clock_time = ClockTime(dt.hour(), dt.minute(), dt.second());
     synchronized_clock_millis = millis();
     current_clock_time = synchronized_clock_time;
   }
@@ -726,25 +551,17 @@ void updateAlarm(int16_t delta) {
   updateTimeDisplay(alarmTime, true, alarmMasterSwitchEnabled);
 }
 
-void changeState_Clock_to_setTime()
-{
-  analogWrite(TimeLED, matrixBrightness * 255 / 16 + 15);
-  display_Cloc();
-  delay(1000);
-  waitForButtonDepress(TimeButton, LOW);
-}
-
 void changeState_setTime_to_Clock()
 {
   updateCurrentTime(true);
   digitalWrite(TimeLED, LOW);
+  clockState();
 }
 
 void setTimeState() {
-  changeState_Clock_to_setTime();
 
   DateTime currentTime = RTC.now();
-  ClockTime t(currentTime);
+  ClockTime t(currentTime.hour(), currentTime.minute(), currentTime.second());
   updateTimeDisplay(t, true, alarmMasterSwitchEnabled);
   
   uint32_t modeActive = millis();
@@ -780,6 +597,17 @@ void setTimeState() {
   changeState_setTime_to_Clock();
 }
 
+void changeState_Clock_to_setTime()
+{
+  analogWrite(TimeLED, matrixBrightness * 255 / 16 + 15);
+  display_Cloc();
+  delay(1000);
+  waitForButtonDepress(TimeButton, LOW);
+  setTimeState();
+}
+
+
+
 void changeState_Clock_to_setAlarm()
 {
   analogWrite(AlarmLED, matrixBrightness * 255 / 16 + 1);
@@ -787,6 +615,7 @@ void changeState_Clock_to_setAlarm()
   delay(1000);
   updateTimeDisplay(alarmTime, true, alarmMasterSwitchEnabled);
   waitForButtonDepress(AlarmButton, LOW);  
+  setAlarmState();
 }
 
 void changeState_setAlarm_to_Clock()
@@ -799,10 +628,10 @@ void changeState_setAlarm_to_Clock()
   digitalWrite(AlarmLED, LOW);
   alarmEnabled = true;
   snoozeActive = false;
+  clockState();
 }
 
 void setAlarmState() {
-  changeState_Clock_to_setAlarm();
   
   uint32_t modeActive = millis();
   bool normalExit = true;
@@ -836,20 +665,13 @@ void changeState_Clock_to_setSunset()
   sunsetActive = true;
   turnLightOn();
   waitForButtonDepress(RotaryButton, LOW);
+  setSunsetState();
 }
 
-void changeState_setSunset_to_Clock()
-{
-  if (sunsetDimLevel == 0) {
-    sunsetActive = false;
-    turnLightOff();
-  }
-  writeSunsetDimToEEPROM();
-}
+
 
 uint32_t millisAtStartOfSunset = 0;
 void setSunsetState() {
-  changeState_Clock_to_setSunset();
   
   uint32_t modeActive = millis();
   bool normalExit = true;
@@ -947,17 +769,80 @@ void processAlarmMasterSwitch()
   }
 }
 
-void loop() {
-  if (alarmButtonPushed()) setAlarmState();
-  else if (timeButtonPushed()) setTimeState();
+void clockState() {
+  if (alarmButtonPushed()) changeState_Clock_to_setAlarm();
+  else if (timeButtonPushed()) changeState_Clock_to_setTime();
   else if (offButtonPushed()) turnOffLightsDueToOffButton();
-  else if (rotaryButtonPushed()) setSunsetState();
+  else if (rotaryButtonPushed()) changeState_Clock_to_setSunset();
 
   processAlarmMasterSwitch();
   updateAlarmLight();
   updateCurrentTime();
   updateClockTime();
   updateSunsetLight();
+}
+
+// States of the alarm clock:
+// CE:  clockEState with alarm enabled through slider switch
+//      Slider -> CD
+//      AlarmButton -> AE
+//      TimeButton -> TE
+//      RotaryButton -> SE
+//      time -> CEA
+// CD:  clockDState with alarm disabled
+//      Slider -> CE
+//      AlarmButton -> AD
+//      TimeButton -> TD
+//      RotaryButton -> SD
+// AE:  setAlarmEState with alarm enabled
+//      AlarmButton -> CE
+//      time -> CE
+// AD:  setAlarmDState with alarm disabled
+//      AlarmButton -> CD
+//      time -> CD
+// TE:  setTimeEState with alarm enabled
+//      TimeButton -> CE
+//      time -> CE
+// TD:  setTimeDState with alarm disabled
+//      TimeButton -> CD
+//      time -> CD
+// SE:  setSundownEState with alarm enabled
+//      RotaryButton with brightness=0 -> CE
+//      RotaryButton with brightness>0 -> CES
+// SD:  setSundownDState with alarm disabled
+//      RotaryButton with brightness=0 -> CD
+//      RotaryButton with brightness>0 -> CDS
+// CEA:  clockAlarmEState with alarm enabled
+//      TouchSensor -> CE
+//      time -> CE
+//      Slider -> CD
+//      AlarmButton -> SE
+//      TimeButton -> TE
+//      RotaryButton -> SE
+//      time -> CEAM
+// CEAM:  clockAlarmMusicEState with alarm enabled
+//      TouchSensor -> CEA
+//      time -> CE
+//      Slider -> CD
+//      AlarmButton -> SE
+//      TimeButton -> TE
+//      RotaryButton -> SE
+//      
+// CES:  clockSunsetEState with alarm enabled
+// CDS:  clockSunsetDState with alarm disabled
+
+void changeState_setSunset_to_Clock()
+{
+  if (sunsetDimLevel == 0) {
+    sunsetActive = false;
+    turnLightOff();
+  }
+  writeSunsetDimToEEPROM();
+  clockState();
+}
+
+void loop() {
+  clockState();
 }
 
 } // namespace SunriseAlarm
