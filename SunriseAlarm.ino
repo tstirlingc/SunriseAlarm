@@ -38,8 +38,8 @@ void updateTimeFromRTCNow();
 void updateTimeFromRTC24HoursAfterLastTime();
 void turnLightOn();
 void turnLightOff();
-void alarmAMusicOn()
-void alarmAMusicOff()
+void alarmAMusicOn();
+void alarmAMusicOff();
 void display_Cloc();
 void display_ALAr();
 void updateTimeDisplay(ClockTime t, bool military, bool dots);
@@ -49,6 +49,8 @@ bool writeSunsetDimToEEPROM();
 void updateTime(ClockTime & t, int16_t delta);
 void updateStartTime();
 bool writeAlarmTimeToEEPROM();
+int32_t secondsBtwDates(ClockTime currentTime, ClockTime alarm);
+void updateSunsetLight();
 
 // Globals
 bool alarmMasterSwitchEnabled = true;
@@ -71,6 +73,9 @@ int defaultSunsetDelta = 10; // minutes
 int sunsetDimLevel = 100; // 100 = max bright, 0 = off
 const int16_t oneHourInSeconds = 3600;
 const int16_t fiveMinutesInSeconds = 300;
+const int16_t thirtyMinutesInSeconds = 1800; // 1800 seconds = 30 minutes
+ClockTime snoozeStartTime;
+uint32_t alarmStartMillis = 0;
 
 } // namespace SunriseAlarm 
 
@@ -110,7 +115,6 @@ Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LED, NEOPIXEL_PIN, NEO_GRB + NEO
 
 const int16_t maxBright = 1024; // resolution of TimerOne::pwm (10 bits)
 const int thirtyMinutes = 30;
-const int16_t thirtyMinutesInSeconds = 1800; // 1800 seconds = 30 minutes
 const int forward_delay = 15;
 const int rewind_delay = 150;
 const uint32_t millisecondsIn30Minutes = 1800000;
@@ -377,7 +381,7 @@ void updateTimeFromRTCNow() {
 
 const uint32_t clockUpdateInterval = 24 * 60 * 60 * 1000; // every 24 hours
 uint32_t lastClockUpdate = millis();
-void updateTimeFromRTC24HoursAfterLastTime(bool force) {
+void updateTimeFromRTC24HoursAfterLastTime() {
   if (isTimeNow(lastClockUpdate, clockUpdateInterval)) {
     updateTimeFromRTCNow();
   }
@@ -502,7 +506,6 @@ void alarmBMusicOff()
   soundAlarmBPlaying = false;
 }
 
-uint32_t alarmStartMillis = 0;
 const unsigned lightUpdateInterval = 50;
 uint32_t lastLightUpdate = millis();
 void updateAlarmLight() {

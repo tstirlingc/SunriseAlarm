@@ -107,7 +107,7 @@ void stateSD();           // done
 void changeState_SD_CD(); // done
 void changeState_SD_CDS(); // done
 
-void state_CEA();         // done
+void stateCEA();         // done
 void changeState_CEA_CE(); // done
 void changeState_CEA_CD(); // done
 void changeState_CEA_AE(); // done
@@ -118,7 +118,7 @@ void changeState_CEA_CEAM(); // done
 
 // TODO:  how to handle going back to CEA after CEAM to make sure we don't go back into CEAM?  Technically this is another state.
 
-void state_CEAM();          // done
+void stateCEAM();          // done
 void changeState_CEAM_CEAMS(); // done
 void changeState_CEAM_CE(); // done
 void changeState_CEAM_CD(); // done
@@ -127,21 +127,21 @@ void changeState_CEAM_TE(); // done
 void changeState_CEAM_SE(); // done
 
 
-void state_CES();         // done
+void stateCES();         // done
 void changeState_CES_CE(); // done
 void changeState_CES_TE(); // done
 void changeState_CES_AE(); // done
 void changeState_CES_SE(); // done
 void changeState_CES_CDS(); // done
 
-void state_CDS();         // done 
+void stateCDS();         // done 
 void changeState_CDS_CD(); // done
 void changeState_CDS_TD(); // done
 void changeState_CDS_AD(); // done
 void changeState_CDS_SD(); // done
 void changeState_CDS_CES(); // done
 
-void state_CEAMS();       // done
+void stateCEAMS();       // done
 void changeState_CEAMS_CD(); // done
 void changeState_CEAMS_TE(); // done
 void changeState_CEAMS_AE(); // done
