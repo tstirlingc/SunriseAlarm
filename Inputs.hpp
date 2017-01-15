@@ -14,34 +14,37 @@ int debounceDigitalRead(int pin, int debounceInterval) {
   return lastResult;
 }
 
+int buttonDebounceInterval = 20; // milliseconds
+int touchSensorDebounceInterval = 30; // milliseconds
+
 bool alarmButtonPushed()
 {
-  return (digitalRead(AlarmButton) == LOW && debounceDigitalRead(AlarmButton) == LOW);
+  return (digitalRead(AlarmButton) == LOW && debounceDigitalRead(AlarmButton, buttonDebounceInterval) == LOW);
 }
 
 bool timeButtonPushed()
 {
-  return (digitalRead(TimeButton) == LOW && debounceDigitalRead(TimeButton) == LOW);
+  return (digitalRead(TimeButton) == LOW && debounceDigitalRead(TimeButton, buttonDebounceInterval) == LOW);
 }
 
 bool touchSensorTouched()
 {
-  return (digitalRead(TouchSensor) == HIGH && debounceDigitalRead(TouchSensor) == HIGH);
+  return (digitalRead(TouchSensor) == HIGH && debounceDigitalRead(TouchSensor, touchSensorDebounceInterval) == HIGH);
 }
 
 bool rotaryButtonPushed()
 {
-  return (digitalRead(RotaryButton) == LOW && debounceDigitalRead(RotaryButton) == LOW);
+  return (digitalRead(RotaryButton) == LOW && debounceDigitalRead(RotaryButton, buttonDebounceInterval) == LOW);
 }
 
 bool sliderMovedToAlarmEnabled()
 {
-  return (digitalRead(alarmMasterSwitch) == HIGH && debounceDigitalRead(alarmMasterSwitch) == HIGH);
+  return (digitalRead(alarmMasterSwitch) == HIGH && debounceDigitalRead(alarmMasterSwitch, buttonDebounceInterval) == HIGH);
 }
 
 bool sliderMovedToAlarmDisabled()
 {
-  return (digitalRead(alarmMasterSwitch) == LOW && debounceDigitalRead(alarmMasterSwitch) == LOW);
+  return (digitalRead(alarmMasterSwitch) == LOW && debounceDigitalRead(alarmMasterSwitch, buttonDebounceInterval) == LOW);
 }
 
 void waitForButtonDepress(int pin, uint8_t pressedState, int debounceInterval) {
@@ -50,8 +53,7 @@ void waitForButtonDepress(int pin, uint8_t pressedState, int debounceInterval) {
   }
 }
 
-int buttonDebounceInterval = 20; // milliseconds
-int touchSensorDebounceInterval = 30; // milliseconds
+
 
 void waitForAlarmButtonDepress()
 {

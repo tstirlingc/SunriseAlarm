@@ -1,4 +1,6 @@
-#include "ClockStates.hpp"
+#include "ClockStates_decl.hpp"
+
+namespace SunriseAlarm {
 
 void stateCE() {
   if (alarmButtonPushed()) changeState_CE_AE();
@@ -35,7 +37,7 @@ void changeState_CE_AE()
   display_ALAr();
   delay(1000);
   updateTimeDisplay(alarmTime, true, alarmMasterSwitchEnabled);
-  waitForButtonDepress(AlarmButton, LOW);  
+  waitForAlarmButtonDepress();  
   stateAE();
 }
 
@@ -44,11 +46,11 @@ void changeState_CE_TE()
   analogWrite(TimeLED, matrixBrightness * 255 / 16 + 15);
   display_Cloc();
   delay(1000);
-  waitForButtonDepress(TimeButton, LOW);
+  waitForTimeButtonDepress();
   stateTE();
 }
 
-void changeState_CE_CD()
+void processTouchSensor()
 {
     if (alarmActive && soundAlarmAPlaying) {
       soundAlarmA(false);
@@ -68,7 +70,7 @@ void changeState_CE_CD()
     else {
       // do nothing
     }
-    waitForButtonDepress(TouchSensor, HIGH);
+    waitForTouchSensorDepress();
 }
 
 void changeState_CE_SE()
@@ -81,7 +83,7 @@ void changeState_CE_SE()
   matrix.writeDisplay();
   sunsetActive = true;
   turnLightOn();
-  waitForButtonDepress(RotaryButton, LOW);
+  waitForRotaryButtonDepress();
   stateSE();
 }
 
@@ -101,7 +103,7 @@ void stateAE() {
     }
   }
   if (normalExit) {
-    waitForButtonDepress(AlarmButton, LOW);
+    waitForAlarmButtonDepress();
   }
   
   changeState_AE_CE();
@@ -130,7 +132,7 @@ void stateSE() {
     }
   }
   if (normalExit) {
-    waitForButtonDepress(RotaryButton, LOW);
+    waitForRotaryButtonDepress();
   }
   millisAtStartOfSunset = millis();
   
@@ -174,7 +176,7 @@ void stateTE() {
     }
   }
   if (normalExit) {
-    waitForButtonDepress(TimeButton, LOW);
+    waitForTimeButtonDepress();
   }
   updateTimeDisplay(t, false, alarmMasterSwitchEnabled);
   RTC.adjust(
@@ -205,4 +207,6 @@ void changeState_AE_CE()
   snoozeActive = false;
   stateSE();
 }
+
+} // namespace SunriseAlarm
 

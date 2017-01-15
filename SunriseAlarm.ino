@@ -24,13 +24,56 @@
 #define RotaryButton 4
 #define soundAPin A1
 #define soundBPin A2
-
-#include "Inputs.hpp"
-#include "ClockStates.hpp"
+#define ENCODER_PIN0 11
+#define ENCODER_PIN1 12
 
 int sunsetDimLevel = 100; // 100 = max bright, 0 = off
 #define NUM_LED 32
 #include "LightColor.h"
+
+namespace SunriseAlarm {
+// Declarations
+void updateCurrentTime(bool force = false);
+void updateClockTime(bool force = false);
+void turnLightOn();
+void turnLightOff();
+void soundAlarmA(bool status);
+void display_Cloc();
+void display_ALAr();
+void updateTimeDisplay(ClockTime t, bool military, bool dots);
+void updateAlarmLight();
+void updateAlarm(int16_t delta);
+bool writeSunsetDimToEEPROM();
+void updateTime(ClockTime & t, int16_t delta);
+void updateStartTime();
+bool writeAlarmTimeToEEPROM();
+
+// Globals
+bool alarmMasterSwitchEnabled = true;
+bool alarmEnabled = true;
+bool alarmActive = false;
+bool snoozeActive = false;
+int matrixBrightness = 0;
+// This is the time you want to get up.  Lights will start 30 minutes before.
+ClockTime alarmTime(6, 00);
+ClockTime startTime(5, 30);
+bool soundAlarmAPlaying = false;
+Adafruit_7segment matrix = Adafruit_7segment();
+ClickEncoder *encoder;
+const uint32_t modeInactivePeriod = 30000; // 30 seconds
+RTC_DS3231 RTC;
+ClockTime synchronized_clock_time;
+uint32_t synchronized_clock_millis;
+ClockTime current_clock_time;
+
+} // namespace SunriseAlarm 
+
+
+#include "Inputs.hpp"
+#include "ClockStates_decl.hpp"
+#include "ClockStates_def.hpp"
+
+
 
 // 2013-04-06 TODO:  Add a temperature sensor to the lamp and if it exceeds a particular temperature, then turn it off or down
 // 2013-04-06 TODO:  Add three LEDs inside the enclosure to indicate which mode you are in.  E.g. green for alarm, blue for time, and red for sundown.
@@ -57,21 +100,14 @@ int sunsetDimLevel = 100; // 100 = max bright, 0 = off
 namespace SunriseAlarm {
 
 
-ClickEncoder *encoder;
-#define ENCODER_PIN0 11
-#define ENCODER_PIN1 12
 
 
-bool soundAlarmAPlaying = false;
+
 bool soundAlarmBPlaying = false;
 
 #define LED_PIN 6
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LED, LED_PIN, NEO_GRB + NEO_KHZ800);
 
-bool alarmMasterSwitchEnabled = true;
-bool alarmEnabled = true;
-bool alarmActive = false;
-bool snoozeActive = false;
 
 //TimerOne timer;
 const int16_t maxBright = 1024; // resolution of TimerOne::pwm (10 bits)
@@ -85,20 +121,15 @@ const uint32_t millisecondsIn30Minutes = 1800000;
 
 int defaultSunsetDelta = 10; // minutes
 
-const uint32_t modeInactivePeriod = 30000; // 30 seconds
 
 AT24Cxx eeprom;
-// This is the time you want to get up.  Lights will start 30 minutes before.
-ClockTime alarmTime(6, 00);
-ClockTime startTime(5, 30);
+
 
 const int alarm_address = 4;
 const int sunset_address = 6;
 const int brightness_address = 7;
 const int sunset_dim_address = 8;
 
-Adafruit_7segment matrix = Adafruit_7segment();
-int matrixBrightness = 0;
 
 // seven segment display:
 //      A
@@ -130,10 +161,6 @@ uint8_t dot_bit = B10000000;
 uint8_t raw_S = B01101101;
 uint8_t raw_F = B01110001;
 
-RTC_DS3231 RTC;
-uint32_t synchronized_clock_millis;
-ClockTime synchronized_clock_time;
-ClockTime current_clock_time;
 
 void timerIsr() {
   encoder->service();
@@ -336,7 +363,7 @@ bool isTimeNow(uint32_t & last, unsigned wait) {
 
 const uint32_t updateInterval = 1000; // every second
 uint32_t lastUpdate = millis();
-void updateCurrentTime(bool force = false) {
+void updateCurrentTime(bool force) {
   if (force || isTimeNow(lastUpdate, updateInterval)) {
     current_clock_time = synchronized_clock_time;
     const uint32_t seconds_delta = static_cast<uint32_t>(millis() - synchronized_clock_millis) / 1000;
@@ -350,7 +377,7 @@ void updateCurrentTime(bool force = false) {
 
 const uint32_t clockUpdateInterval = 24 * 60 * 60 * 1000; // every 24 hours
 uint32_t lastClockUpdate = millis();
-void updateClockTime(bool force = false) {
+void updateClockTime(bool force) {
   if (force || isTimeNow(lastClockUpdate, clockUpdateInterval)) {
     DateTime dt = RTC.now();
     synchronized_clock_time = ClockTime(dt.hour(), dt.minute(), dt.second());
@@ -548,7 +575,7 @@ void updateSunsetLight() {
 }
 
 void loop() {
-  clockState();
+  stateCE();
 }
 
 } // namespace SunriseAlarm
