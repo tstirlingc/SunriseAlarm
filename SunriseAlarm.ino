@@ -26,18 +26,20 @@
 #define soundBPin A2
 #define ENCODER_PIN0 11
 #define ENCODER_PIN1 12
+#define NEOPIXEL_PIN 6
 
-int sunsetDimLevel = 100; // 100 = max bright, 0 = off
 #define NUM_LED 32
-#include "LightColor.h"
 
 namespace SunriseAlarm {
 // Declarations
-void updateCurrentTime(bool force = false);
-void updateClockTime(bool force = false);
+void updateClockDisplayNow();
+void updateClockDisplayOneSecondAfterLastTime();
+void updateTimeFromRTCNow();
+void updateTimeFromRTC24HoursAfterLastTime();
 void turnLightOn();
 void turnLightOff();
-void soundAlarmA(bool status);
+void alarmAMusicOn()
+void alarmAMusicOff()
 void display_Cloc();
 void display_ALAr();
 void updateTimeDisplay(ClockTime t, bool military, bool dots);
@@ -51,7 +53,6 @@ bool writeAlarmTimeToEEPROM();
 // Globals
 bool alarmMasterSwitchEnabled = true;
 bool alarmEnabled = true;
-bool alarmActive = false;
 bool snoozeActive = false;
 int matrixBrightness = 0;
 // This is the time you want to get up.  Lights will start 30 minutes before.
@@ -65,15 +66,18 @@ RTC_DS3231 RTC;
 ClockTime synchronized_clock_time;
 uint32_t synchronized_clock_millis;
 ClockTime current_clock_time;
+uint32_t millisAtStartOfSunset = 0;
+int defaultSunsetDelta = 10; // minutes
+int sunsetDimLevel = 100; // 100 = max bright, 0 = off
+const int16_t oneHourInSeconds = 3600;
+const int16_t fiveMinutesInSeconds = 300;
 
 } // namespace SunriseAlarm 
 
-
+#include "LightColor.h"
 #include "Inputs.hpp"
 #include "ClockStates_decl.hpp"
 #include "ClockStates_def.hpp"
-
-
 
 // 2013-04-06 TODO:  Add a temperature sensor to the lamp and if it exceeds a particular temperature, then turn it off or down
 // 2013-04-06 TODO:  Add three LEDs inside the enclosure to indicate which mode you are in.  E.g. green for alarm, blue for time, and red for sundown.
@@ -99,31 +103,19 @@ ClockTime current_clock_time;
 
 namespace SunriseAlarm {
 
-
-
-
-
 bool soundAlarmBPlaying = false;
 
-#define LED_PIN 6
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LED, LED_PIN, NEO_GRB + NEO_KHZ800);
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LED, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 
-//TimerOne timer;
 const int16_t maxBright = 1024; // resolution of TimerOne::pwm (10 bits)
 const int thirtyMinutes = 30;
 const int16_t thirtyMinutesInSeconds = 1800; // 1800 seconds = 30 minutes
-//const int timerPeriod = 1000; // 1000us = 1 kHz flicker
-const int16_t maxTime = 3600; // 1.0 hours
 const int forward_delay = 15;
 const int rewind_delay = 150;
 const uint32_t millisecondsIn30Minutes = 1800000;
 
-int defaultSunsetDelta = 10; // minutes
-
-
 AT24Cxx eeprom;
-
 
 const int alarm_address = 4;
 const int sunset_address = 6;
@@ -189,46 +181,46 @@ bool writeAlarmTimeToEEPROM() {
   return false;
 }
 
-bool readBrightnessFromEEPROM() {
-  if (eeprom.isPresent()) {
-    char buf[1];
-    eeprom.ReadMem(brightness_address, buf, 1);
-    matrixBrightness = static_cast<int>(buf[0]);
-    return true;
-  }
-  return false;
-}
+//bool readBrightnessFromEEPROM() {
+//  if (eeprom.isPresent()) {
+//    char buf[1];
+//    eeprom.ReadMem(brightness_address, buf, 1);
+//    matrixBrightness = static_cast<int>(buf[0]);
+//    return true;
+//  }
+//  return false;
+//}
 
-bool writeBrightnessToEEPROM() {
-  if (eeprom.isPresent()) {
-    char myBuf[1];
-    myBuf[0] = static_cast<char>(matrixBrightness);
-    eeprom.WriteMem(brightness_address, myBuf, 1);
-    return true;
-  }
-  return false;
-}
+//bool writeBrightnessToEEPROM() {
+//  if (eeprom.isPresent()) {
+//    char myBuf[1];
+//    myBuf[0] = static_cast<char>(matrixBrightness);
+//    eeprom.WriteMem(brightness_address, myBuf, 1);
+//    return true;
+//  }
+//  return false;
+//}
 
 
-bool readSunsetDeltaFromEEPROM() {
-  if (eeprom.isPresent()) {
-    char buf[1];
-    eeprom.ReadMem(sunset_address, buf, 1);
-    defaultSunsetDelta = static_cast<int>(buf[0]);
-    return true;
-  }
-  return false;
-}
+//bool readSunsetDeltaFromEEPROM() {
+//  if (eeprom.isPresent()) {
+//    char buf[1];
+//    eeprom.ReadMem(sunset_address, buf, 1);
+//    defaultSunsetDelta = static_cast<int>(buf[0]);
+//    return true;
+//  }
+//  return false;
+//}
 
-bool writeSunsetDeltaToEEPROM() {
-  if (eeprom.isPresent()) {
-    char myBuf[1];
-    myBuf[0] = static_cast<char>(defaultSunsetDelta);
-    eeprom.WriteMem(sunset_address, myBuf, 1);
-    return true;
-  }
-  return false;
-}
+//bool writeSunsetDeltaToEEPROM() {
+//  if (eeprom.isPresent()) {
+//    char myBuf[1];
+//    myBuf[0] = static_cast<char>(defaultSunsetDelta);
+//    eeprom.WriteMem(sunset_address, myBuf, 1);
+//    return true;
+//  }
+//  return false;
+//}
 
 bool readSunsetDimFromEEPROM() {
   if (eeprom.isPresent()) {
@@ -323,9 +315,6 @@ void turnLightOff() {
 }
 
 
-
-
-
 // DONE:  Update to display 12 hr time
 void updateTimeDisplay(ClockTime t, bool military, bool dots) {
   matrix.print(0);
@@ -361,28 +350,36 @@ bool isTimeNow(uint32_t & last, unsigned wait) {
   return false;
 }
 
+void updateClockDisplayNow() {
+  current_clock_time = synchronized_clock_time;
+  const uint32_t seconds_delta = static_cast<uint32_t>(millis() - synchronized_clock_millis) / 1000;
+  const uint32_t minutes_delta = seconds_delta / 60;
+  current_clock_time.minute += minutes_delta;
+  current_clock_time.second += (seconds_delta - minutes_delta * 60);
+  current_clock_time.fixTime();
+  updateTimeDisplay(current_clock_time, false, alarmMasterSwitchEnabled);
+}
+
 const uint32_t updateInterval = 1000; // every second
 uint32_t lastUpdate = millis();
-void updateCurrentTime(bool force) {
-  if (force || isTimeNow(lastUpdate, updateInterval)) {
-    current_clock_time = synchronized_clock_time;
-    const uint32_t seconds_delta = static_cast<uint32_t>(millis() - synchronized_clock_millis) / 1000;
-    const uint32_t minutes_delta = seconds_delta / 60;
-    current_clock_time.minute += minutes_delta;
-    current_clock_time.second += (seconds_delta - minutes_delta * 60);
-    current_clock_time.fixTime();
-    updateTimeDisplay(current_clock_time, false, alarmMasterSwitchEnabled);
+void updateClockDisplayOneSecondAfterLastTime() {
+  if (isTimeNow(lastUpdate, updateInterval)) {
+    updateClockDisplayNow();
   }
+}
+
+void updateTimeFromRTCNow() {
+  DateTime dt = RTC.now();
+  synchronized_clock_time = ClockTime(dt.hour(), dt.minute(), dt.second());
+  synchronized_clock_millis = millis();
+  current_clock_time = synchronized_clock_time;
 }
 
 const uint32_t clockUpdateInterval = 24 * 60 * 60 * 1000; // every 24 hours
 uint32_t lastClockUpdate = millis();
-void updateClockTime(bool force) {
-  if (force || isTimeNow(lastClockUpdate, clockUpdateInterval)) {
-    DateTime dt = RTC.now();
-    synchronized_clock_time = ClockTime(dt.hour(), dt.minute(), dt.second());
-    synchronized_clock_millis = millis();
-    current_clock_time = synchronized_clock_time;
+void updateTimeFromRTC24HoursAfterLastTime(bool force) {
+  if (isTimeNow(lastClockUpdate, clockUpdateInterval)) {
+    updateTimeFromRTCNow();
   }
 }
 
@@ -463,12 +460,12 @@ void setup() {
   // Play an easter-egg message while displaying my name...
   display_sfc();
   display_todd();
-  readBrightnessFromEEPROM();
+  //readBrightnessFromEEPROM();
   matrix.setBrightness(matrixBrightness); // 0-15
-  readSunsetDeltaFromEEPROM();
+  //readSunsetDeltaFromEEPROM();
   readSunsetDimFromEEPROM();
-  updateClockTime(true);
-  updateCurrentTime(true);
+  updateTimeFromRTCNow();
+  updateClockDisplayNow();
   readAlarmTimeFromEEPROM();
   updateStartTime();
 }
@@ -481,14 +478,28 @@ int32_t secondsBtwDates(ClockTime currentTime, ClockTime alarm) {
   return ( s );
 }
 
-void soundAlarmA(bool status) {
-  digitalWrite(soundAPin, (status ? LOW : HIGH));
-  soundAlarmAPlaying = status;
+void alarmAMusicOn()
+{
+  digitalWrite(soundAPin, LOW);
+  soundAlarmAPlaying = true;
 }
 
-void soundAlarmB(bool status) {
-  digitalWrite(soundBPin, (status ? LOW : HIGH));
-  soundAlarmBPlaying = status;
+void alarmAMusicOff()
+{
+  digitalWrite(soundAPin, HIGH);
+  soundAlarmAPlaying = false;
+}
+
+void alarmBMusicOn()
+{
+  digitalWrite(soundBPin, LOW);
+  soundAlarmBPlaying = true;
+}
+
+void alarmBMusicOff()
+{
+  digitalWrite(soundBPin, HIGH);
+  soundAlarmBPlaying = false;
 }
 
 uint32_t alarmStartMillis = 0;
@@ -496,32 +507,6 @@ const unsigned lightUpdateInterval = 50;
 uint32_t lastLightUpdate = millis();
 void updateAlarmLight() {
   if (!isTimeNow(lastLightUpdate, lightUpdateInterval)) {
-    return;
-  }
-  if (!alarmMasterSwitchEnabled) return;
-  ClockTime current = current_clock_time;
-  int32_t seconds = secondsBtwDates(current, startTime);
-  if ((seconds < 0) || (seconds >= maxTime)) {
-    if (alarmActive) {
-      soundAlarmA(false);
-      alarmActive = false;
-    }
-    snoozeActive = false;
-    alarmEnabled = true;
-    return;
-  }
-  if (!alarmEnabled) {
-    return;
-  }
-  if (!alarmActive)
-  {
-    setColorForSunRise();
-    alarmStartMillis = static_cast<uint32_t>(millis() - 1000 * seconds);
-    alarmActive = true;
-  }
-  if (seconds >= thirtyMinutesInSeconds) {
-    linearBrightOfStep(totalDimmerSteps);
-    if (!snoozeActive) soundAlarmA(true);
     return;
   }
   uint32_t debug_millis = static_cast<uint32_t>(millis() - alarmStartMillis);
@@ -539,23 +524,9 @@ void updateAlarm(int16_t delta) {
   updateTimeDisplay(alarmTime, true, alarmMasterSwitchEnabled);
 }
 
-
-
-
-
-
-
-
-
-
-
 uint32_t lastSunsetUpdate = millis();
 unsigned sunsetUpdateInterval = 5;
-int lastSunsetLightLevel = 0;
 void updateSunsetLight() {
-  if (!sunsetActive) {
-    return;
-  }
   if (!isTimeNow(lastSunsetUpdate, sunsetUpdateInterval)) {
     return;
   }
@@ -564,14 +535,8 @@ void updateSunsetLight() {
   uint32_t finalMillis = defaultSunsetDelta;
   finalMillis *= 60;
   finalMillis *= 1000;
-  if (delta > finalMillis) {
-    sunsetActive = false;
-    linearBrightOfStep(0);
-  }
-  else {
-    uint32_t temp = totalDimmerSteps - totalDimmerSteps * delta / finalMillis;
-    logisticBrightOfStep(temp);
-  }
+  uint32_t temp = totalDimmerSteps - totalDimmerSteps * delta / finalMillis;
+  logisticBrightOfStep(temp);
 }
 
 void loop() {
