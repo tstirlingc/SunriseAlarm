@@ -14,7 +14,8 @@
 #include <Adafruit_NeoPixel.h>
 #include <SoftwareSerial.h>
 #include "Adafruit_Soundboard.h"
-#include "ClockTime.h"
+#include "ClockTime.hpp"
+#include "MillisDelta.hpp"
 
 #define AlarmButton 7
 #define AlarmLED 5
@@ -301,7 +302,7 @@ void updateTimeDisplay(ClockTime t, bool military, bool dots) {
 // last is the last time this function returned true
 bool isTimeNow(uint32_t & last, unsigned wait) {
   uint32_t time = millis();
-  if (static_cast<uint32_t>(time - last) > wait) {
+  if (millis_delta(last, time) > wait) {
     last = time;
     return true;
   }
@@ -310,7 +311,7 @@ bool isTimeNow(uint32_t & last, unsigned wait) {
 
 void updateClockDisplayNow() {
   current_clock_time = synchronized_clock_time;
-  const uint32_t seconds_delta = static_cast<uint32_t>(millis() - synchronized_clock_millis) / 1000;
+  const uint32_t seconds_delta = millis_delta(synchronized_clock_millis, millis()) / 1000;
   const uint32_t minutes_delta = seconds_delta / 60;
   current_clock_time.minute += minutes_delta;
   current_clock_time.second += (seconds_delta - minutes_delta * 60);
@@ -461,7 +462,7 @@ void updateAlarmLight() {
   if (!isTimeNow(lastLightUpdate, lightUpdateInterval)) {
     return;
   }
-  uint32_t debug_millis = static_cast<uint32_t>(millis() - alarmStartMillis);
+  uint32_t debug_millis = millis_delta(alarmStartMillis, millis());
   logisticBrightOfMilliseconds(debug_millis);
 }
 
@@ -482,8 +483,7 @@ void updateSunsetLight() {
   if (!isTimeNow(lastSunsetUpdate, sunsetUpdateInterval)) {
     return;
   }
-  uint32_t currentMillis = millis();
-  uint32_t delta = static_cast<uint32_t>(currentMillis - millisAtStartOfSunset);
+  uint32_t delta = millis_delta(millisAtStartOfSunset, millis());
   uint32_t temp = totalDimmerSteps - totalDimmerSteps * delta / sunsetDeltaInMilliseconds;
   logisticBrightOfStep(temp);
 }

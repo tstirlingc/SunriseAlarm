@@ -1,10 +1,15 @@
 #ifndef INPUTS_HPP
 #define INPUTS_HPP
 
+#include "MillisDelta.hpp"
+
+namespace SunriseAlarm {
+  
+
 int debounceDigitalRead(int pin, int debounceInterval) {
   int lastResult = digitalRead(pin);
   uint32_t lastRead = millis();
-  while (static_cast<uint32_t>(millis() - lastRead) < debounceInterval) {
+  while (millis_delta(lastRead, millis()) < debounceInterval) {
     int result = digitalRead(pin);
     if (result != lastResult) {
       lastResult = result;
@@ -127,5 +132,7 @@ bool waitForSliderToSettleToAlarmDisabled()
   Serial.println(F("slider settled to disabled"));
 #endif
 }
+
+} // namespace SunriseAlarm
 
 #endif // INPUTS_HPP

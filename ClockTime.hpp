@@ -193,10 +193,6 @@ int32_t numSecondsFromWindowStartForTimeInWindow(
   return ( s );
 }
 
-uint32_t millis_delta(uint32_t start, uint32_t finish) {
-  return static_cast<uint32_t>(finish-start);
-}
-
 } // namespace SunriseAlarm 
 
 #endif // CLOCKTIME_H

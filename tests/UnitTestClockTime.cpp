@@ -1,6 +1,6 @@
 #include "gtest/gtest.h"
 #include "arduino-mock/Arduino.h"
-#include "../ClockTime.h"
+#include "../ClockTime.hpp"
 
 using ::testing::Return; 
 
@@ -148,28 +148,4 @@ TEST(numSecondsFromWindowStart, midnightAtLower2) { EXPECT_EQ(  -1, checkNumSeco
 TEST(numSecondsFromWindowStart, midnightAtUpper1) { EXPECT_EQ(   1, checkNumSecondsFromWindowStart(23,00,01, 23,00,00, 00,00,00)); }
 TEST(numSecondsFromWindowStart, midnightInLower)  { EXPECT_EQ(   1, checkNumSecondsFromWindowStart(23,30,01, 23,30,00, 00,30,00)); }
 TEST(numSecondsFromWindowStart, midnightInUpper)  { EXPECT_EQ(1801, checkNumSecondsFromWindowStart(00,00,01, 23,30,00, 00,30,00)); }
-
-TEST(MillisWrap, trivial) {
-  uint32_t past = 1000;
-  uint32_t current = 1100;
-  uint32_t delta = SunriseAlarm::millis_delta(past, current);
-  EXPECT_EQ(100, delta);
-}
-
-TEST(MillisWrap, acrossZero) {
-  uint32_t past = static_cast<uint32_t>(-1000);
-  std::cout << "past = " << past << std::endl;
-  uint32_t current = 1000;
-  uint32_t delta = SunriseAlarm::millis_delta(past, current);
-  EXPECT_EQ(2000, delta);
-}
-
-TEST(MillisWrap, acrossZero2) {
-  uint32_t past = 1000;
-  past = past - 2000;
-  std::cout << "past = " << past << std::endl;
-  uint32_t current = 1000;
-  uint32_t delta = SunriseAlarm::millis_delta(past, current);
-  EXPECT_EQ(2000, delta);
-}
 

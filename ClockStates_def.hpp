@@ -1,3 +1,6 @@
+#ifndef CLOCK_STATES_DEF_HPP
+#define CLOCK_STATES_DEF_HPP
+
 #include "ClockStates_decl.hpp"
 
 namespace SunriseAlarm {
@@ -32,8 +35,7 @@ bool timeToEndSnooze() {
 }
 
 bool timeForSunsetToBeFinished() { 
-  uint32_t currentMillis = millis();
-  uint32_t delta = static_cast<uint32_t>(currentMillis - millisAtStartOfSunset);
+  uint32_t delta = millis_delta(millisAtStartOfSunset, millis());
   if (delta > sunsetDeltaInMilliseconds) return true;
   return false;
 }
@@ -192,7 +194,7 @@ void stateAImpl()
       updateAlarm(encoderDelta);
       modeActive = millis();
     }
-    if (static_cast<uint32_t>(millis() - modeActive) > MODE_INACTIVE_PERIOD_MILLIS) {
+    if (millis_delta(modeActive, millis()) > MODE_INACTIVE_PERIOD_MILLIS) {
       normalExit = false;
       break;
     }
@@ -234,7 +236,7 @@ int stateSImpl() {
       turnLightOn();
       modeActive = millis();
     }
-    if (static_cast<uint32_t>(millis() - modeActive) > MODE_INACTIVE_PERIOD_MILLIS) {
+    if (millis_delta(modeActive, millis()) > MODE_INACTIVE_PERIOD_MILLIS) {
       normalExit = false;
       break;
     }
@@ -339,7 +341,7 @@ void stateTImpl() {
       updateTime(t, encoderDelta);
       modeActive = millis();
     }
-    if (static_cast<uint32_t>(millis() - modeActive) > MODE_INACTIVE_PERIOD_MILLIS) {
+    if (millis_delta(modeActive, millis()) > MODE_INACTIVE_PERIOD_MILLIS) {
       normalExit = false;
       break;
     }
@@ -832,4 +834,6 @@ void changeState_CEOff_CD() {
 
 
 } // namespace SunriseAlarm
+
+#endif // CLOCK_STATES_DEF_HPP
 
