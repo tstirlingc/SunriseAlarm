@@ -14,5 +14,6 @@ BARE_LIBS="/Users/toddcoffey/Projects/arduino-mock/build/lib/gtest/gtest/src/gte
 
 c++ $INCLUDE_DIRS -c UnitTestClockTime.cpp
 c++ $INCLUDE_DIRS -c UnitTestLightColor.cpp
-c++ $INCLUDE_DIRS main.cpp -o sunrise_tests UnitTestClockTime.o UnitTestLightColor.o $BARE_LIBS
+c++ $INCLUDE_DIRS -c UnitTestMillis.cpp
+c++ $INCLUDE_DIRS main.cpp -o sunrise_tests UnitTestClockTime.o UnitTestLightColor.o UnitTestMillis.o $BARE_LIBS
 
