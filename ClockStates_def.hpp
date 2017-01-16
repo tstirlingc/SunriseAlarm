@@ -510,7 +510,7 @@ void changeState_CEAM_CEAMS() {
   alarmAMusicOff();
   waitForTouchSensorDepress();
   snoozeStartTime = current_clock_time;
-  snoozeEndTime = snoozeStartTime + snoozeMinutes;
+  snoozeEndTime = snoozeStartTime + SNOOZE_MINUTES;
   stateCEAMS();
 }
 
