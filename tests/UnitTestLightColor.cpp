@@ -31,11 +31,11 @@ TEST(LightColor, setColorForSunset) {
 
 TEST(LightColor, setColorForSunRise) {
   SunriseAlarm::setColorForSunRise();
-  uint8_t dimLevel = SunriseAlarm::sunRiseDimLevel;
+  uint8_t dimLevel = SunriseAlarm::sunriseDimLevel;
   uint8_t color[3];
-  color[0] = (1.0*dimLevel/100.0)*SunriseAlarm::tungsten100W[0];
-  color[1] = (1.0*dimLevel/100.0)*SunriseAlarm::tungsten100W[1];
-  color[2] = (1.0*dimLevel/100.0)*SunriseAlarm::tungsten100W[2];
+  color[0] = (1.0*dimLevel/100.0)*SunriseAlarm::kitchen[0];
+  color[1] = (1.0*dimLevel/100.0)*SunriseAlarm::kitchen[1];
+  color[2] = (1.0*dimLevel/100.0)*SunriseAlarm::kitchen[2];
   EXPECT_EQ(color[0], SunriseAlarm::targetColor[0]);
   EXPECT_EQ(color[1], SunriseAlarm::targetColor[1]);
   EXPECT_EQ(color[2], SunriseAlarm::targetColor[2]);

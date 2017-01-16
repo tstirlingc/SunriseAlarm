@@ -14,42 +14,67 @@ int debounceDigitalRead(int pin, int debounceInterval) {
   return lastResult;
 }
 
-int buttonDebounceInterval = 20; // milliseconds
-int touchSensorDebounceInterval = 30; // milliseconds
+int buttonDebounceInterval = 10; // milliseconds
+int touchSensorDebounceInterval = 10; // milliseconds
+int waitForDepressInterval = 30; // milliseconds
 
 bool alarmButtonPushed()
 {
-  return (digitalRead(AlarmButton) == LOW && debounceDigitalRead(AlarmButton, buttonDebounceInterval) == LOW);
+  bool pushed = (digitalRead(AlarmButton) == LOW && debounceDigitalRead(AlarmButton, buttonDebounceInterval) == LOW);
+#ifdef DEBUG
+  if (pushed) Serial.println(F("alarm button pushed"));
+#endif
+  return pushed;
 }
 
 bool timeButtonPushed()
 {
-  return (digitalRead(TimeButton) == LOW && debounceDigitalRead(TimeButton, buttonDebounceInterval) == LOW);
+  bool pushed = (digitalRead(TimeButton) == LOW && debounceDigitalRead(TimeButton, buttonDebounceInterval) == LOW);
+#ifdef DEBUG
+  if (pushed) Serial.println(F("time button pushed"));
+#endif
+  return pushed;
 }
 
 bool touchSensorTouched()
 {
-  return (digitalRead(TouchSensor) == HIGH && debounceDigitalRead(TouchSensor, touchSensorDebounceInterval) == HIGH);
+  bool pushed = (digitalRead(TouchSensor) == HIGH && debounceDigitalRead(TouchSensor, touchSensorDebounceInterval) == HIGH);
+#ifdef DEBUG
+  if (pushed) Serial.println(F("touch sensor touched"));
+#endif
+  return pushed;
 }
 
 bool rotaryButtonPushed()
 {
-  return (digitalRead(RotaryButton) == LOW && debounceDigitalRead(RotaryButton, buttonDebounceInterval) == LOW);
+  bool pushed = (digitalRead(RotaryButton) == LOW && debounceDigitalRead(RotaryButton, buttonDebounceInterval) == LOW);
+#ifdef DEBUG
+  if (pushed) Serial.println(F("rotary button pushed"));
+#endif
+  return pushed;
 }
 
 bool sliderMovedToAlarmEnabled()
 {
-  return (digitalRead(alarmMasterSwitch) == HIGH && debounceDigitalRead(alarmMasterSwitch, buttonDebounceInterval) == HIGH);
+  bool enabled = (digitalRead(alarmMasterSwitch) == HIGH && debounceDigitalRead(alarmMasterSwitch, buttonDebounceInterval) == HIGH);
+#ifdef DEBUG
+  if (enabled) Serial.println(F("slider enabled"));
+#endif
+  return enabled;
 }
 
 bool sliderMovedToAlarmDisabled()
 {
-  return (digitalRead(alarmMasterSwitch) == LOW && debounceDigitalRead(alarmMasterSwitch, buttonDebounceInterval) == LOW);
+  bool disabled = (digitalRead(alarmMasterSwitch) == LOW && debounceDigitalRead(alarmMasterSwitch, buttonDebounceInterval) == LOW);
+#ifdef DEBUG
+  if (disabled) Serial.println(F("slider disabled"));
+#endif
+  return disabled;
 }
 
-void waitForButtonDepress(int pin, uint8_t pressedState, int debounceInterval) {
-  while (debounceDigitalRead(pin, debounceInterval) == pressedState) {
-    delay(debounceInterval);
+void waitForButtonDepress(int pin, uint8_t pressedState, int waitInterval) {
+  while (debounceDigitalRead(pin, waitInterval) == pressedState) {
+    delay(waitInterval);
   }
 }
 
@@ -57,32 +82,50 @@ void waitForButtonDepress(int pin, uint8_t pressedState, int debounceInterval) {
 
 void waitForAlarmButtonDepress()
 {
-  waitForButtonDepress(AlarmButton, LOW, buttonDebounceInterval);
+  waitForButtonDepress(AlarmButton, LOW, waitForDepressInterval);
+#ifdef DEBUG
+  Serial.println(F("alarm button depressed"));
+#endif
 }
 
 void waitForTimeButtonDepress()
 {
-  waitForButtonDepress(TimeButton, LOW, buttonDebounceInterval);
+  waitForButtonDepress(TimeButton, LOW, waitForDepressInterval);
+#ifdef DEBUG
+  Serial.println(F("time button depressed"));
+#endif
 }
 
 void waitForRotaryButtonDepress()
 {
-  waitForButtonDepress(RotaryButton, LOW, buttonDebounceInterval);
+  waitForButtonDepress(RotaryButton, LOW, waitForDepressInterval);
+#ifdef DEBUG
+  Serial.println(F("rotary button depressed"));
+#endif
 }
 
 void waitForTouchSensorDepress()
 {
-  waitForButtonDepress(TouchSensor, HIGH, touchSensorDebounceInterval);
+  waitForButtonDepress(TouchSensor, HIGH, waitForDepressInterval);
+#ifdef DEBUG
+  Serial.println(F("touch sensor depressed"));
+#endif
 }
 
 bool waitForSliderToSettleToAlarmEnabled()
 {
-  waitForButtonDepress(alarmMasterSwitch, LOW, buttonDebounceInterval);
+  waitForButtonDepress(alarmMasterSwitch, LOW, waitForDepressInterval);
+#ifdef DEBUG
+  Serial.println(F("slider settled to enabled"));
+#endif
 }
 
 bool waitForSliderToSettleToAlarmDisabled()
 {
-  waitForButtonDepress(alarmMasterSwitch, HIGH, buttonDebounceInterval);
+  waitForButtonDepress(alarmMasterSwitch, HIGH, waitForDepressInterval);
+#ifdef DEBUG
+  Serial.println(F("slider settled to disabled"));
+#endif
 }
 
 #endif // INPUTS_HPP

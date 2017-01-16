@@ -83,14 +83,14 @@ struct ClockTime {
 };
 
 
-inline ClockTime operator+(ClockTime lhs, int minutes) {
+ClockTime operator+(ClockTime lhs, int minutes) {
   lhs.minute += minutes;
   lhs.fixTime();
   return lhs;
 }
 
 
-inline bool operator<(ClockTime lhs, ClockTime rhs) {
+bool operator<(const ClockTime& lhs, const ClockTime& rhs) {
   if (lhs.hour < rhs.hour) {
     return true;
   }
@@ -111,7 +111,7 @@ inline bool operator<(ClockTime lhs, ClockTime rhs) {
   return false;
 }
 
-inline bool operator<=(ClockTime lhs, ClockTime rhs) {
+bool operator<=(const ClockTime& lhs, const ClockTime& rhs) {
   if (lhs.hour < rhs.hour) {
     return true;
   }
@@ -132,17 +132,66 @@ inline bool operator<=(ClockTime lhs, ClockTime rhs) {
   return false;
 }
 
-inline bool operator==(ClockTime lhs, ClockTime rhs) {
+bool operator>(const ClockTime& lhs, const ClockTime& rhs) {
+  return !(lhs <= rhs);
+}
+
+bool operator>=(const ClockTime& lhs, const ClockTime& rhs) {
+  return !(lhs < rhs);
+}
+
+bool operator==(const ClockTime& lhs, const ClockTime& rhs) {
   if ((lhs.hour == rhs.hour) && (lhs.minute == rhs.minute) && (lhs.second == rhs.second)) {
     return true;
   }
   return false;
 }
 
-inline bool operator!=(ClockTime lhs, ClockTime rhs) {
+bool operator!=(const ClockTime& lhs, const ClockTime& rhs) {
   return !(lhs == rhs);
 }
 
+//int32_t secondsBtwDates(const ClockTime& alarm, const ClockTime& currentTime) {
+//  int32_t s = (currentTime.hour - alarm.hour);
+//  s *= 3600;
+//  s += (currentTime.minute - alarm.minute) * 60;
+//  s += (currentTime.second - alarm.second);
+//  return ( s );
+//}
+
+void fixCurrentTimeAndWindowEnd(
+    ClockTime& currentTime, 
+    const ClockTime& windowStart, 
+    ClockTime& windowEnd) {
+  if (windowEnd < windowStart && currentTime < windowEnd) {
+    windowEnd.hour += 24;
+    currentTime.hour += 24;
+  } else if (windowEnd < windowStart) {
+    windowEnd.hour += 24;
+  }
+}
+
+bool isTimeInWindow(
+    ClockTime currentTime, 
+    const ClockTime& windowStart, 
+    ClockTime windowEnd) {
+  fixCurrentTimeAndWindowEnd(currentTime, windowStart, windowEnd);
+  if (currentTime >= windowStart && currentTime < windowEnd) return true;
+  return false;
+}
+
+int32_t numSecondsFromWindowStartForTimeInWindow(
+    ClockTime currentTime, 
+    const ClockTime& windowStart, 
+    ClockTime windowEnd) {
+  if (!isTimeInWindow(currentTime, windowStart, windowEnd)) return -1;
+  fixCurrentTimeAndWindowEnd(currentTime, windowStart, windowEnd);
+  int32_t s = (currentTime.hour - windowStart.hour);
+  s *= 3600;
+  s += (currentTime.minute - windowStart.minute) * 60;
+  s += (currentTime.second - windowStart.second);
+  return ( s );
+}
 
 } // namespace SunriseAlarm 
 

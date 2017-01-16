@@ -21,7 +21,7 @@ const uint8_t halogen[3] = {255, 241, 224};
 const uint8_t kitchen[3] = {255, 241, 110};
 const uint8_t testingLight[3] = {50, 0, 0};
 uint8_t targetColor[3] = {255, 0, 0};
-const uint8_t sunRiseDimLevel = 90; // Percentage of max [0, 100]
+const uint8_t sunriseDimLevel = 95; // Percentage of max [0, 100]
 
 uint8_t minRGBLevel = computeMinRGBLevel(targetColor);
 uint16_t totalDimmerSteps = minRGBLevel * NUM_LED;
@@ -40,7 +40,7 @@ void setColorForSunRise()
 {
   for (uint8_t i = 0 ; i < 3 ; ++i)
   {
-    targetColor[i] = (sunRiseDimLevel*1.0/100.0)*(1.0*kitchen[i]);
+    targetColor[i] = (sunriseDimLevel*1.0/100.0)*(1.0*kitchen[i]);
   }
   minRGBLevel = computeMinRGBLevel(targetColor);
   totalDimmerSteps = minRGBLevel * NUM_LED;

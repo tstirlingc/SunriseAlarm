@@ -34,7 +34,7 @@ namespace SunriseAlarm {
 //      RotaryButton with brightness=0 -> CD
 //      RotaryButton with brightness>0 -> CDS
 //*CEA:  clockAlarmEState with alarm enabled
-//      TouchSensor -> CE
+//      TouchSensor -> CEOff
 //      time -> CE
 //      Slider -> CD
 //      AlarmButton -> AE
@@ -62,17 +62,20 @@ namespace SunriseAlarm {
 //      AlarmButton -> AD
 //      TimeButton -> TD
 //      RotaryButton -> SD
-// CEAMS: Snooze: Light on, music turned off
+//*CEAMS: Snooze: Light on, music turned off
 //      time -> CE
 //      time -> CEAM
-//      touchSensor -> CE
+//      touchSensor -> CEOff
 //      Slider -> CD
 //      AlarmButton -> AE
 //      TimeButton -> TE
 //      RotaryButton -> SE
-//
-
-bool sunsetActive = false; // TODO delete
+//*CEOff:  Turn alarm off.
+//      time -> CE
+//      Slider -> CD
+//      AlarmButton -> AE
+//      TimeButton -> TE
+//      RotaryButton -> SE
 
 void stateCE();           // done
 void changeState_CE_CD(); // done
@@ -109,14 +112,13 @@ void changeState_SD_CDS(); // done
 
 void stateCEA();         // done
 void changeState_CEA_CE(); // done
+void changeState_CEA_CEOff(); // done
 void changeState_CEA_CD(); // done
 void changeState_CEA_AE(); // done
 void changeState_CEA_TE(); // done
 void changeState_CEA_SE(); // done
 void changeState_CEA_CEAM(); // done
 
-
-// TODO:  how to handle going back to CEA after CEAM to make sure we don't go back into CEAM?  Technically this is another state.
 
 void stateCEAM();          // done
 void changeState_CEAM_CEAMS(); // done
@@ -147,7 +149,15 @@ void changeState_CEAMS_TE(); // done
 void changeState_CEAMS_AE(); // done
 void changeState_CEAMS_SE(); // done
 void changeState_CEAMS_CE(); // done
+void changeState_CEAMS_CEOff(); // done
 void changeState_CEAMS_CEAM(); // done
+
+void stateCEOff();          // done
+void changeState_CEOff_CE(); // done
+void changeState_CEOff_TE(); // done
+void changeState_CEOff_AE(); // done
+void changeState_CEOff_SE(); // done
+void changeState_CEOff_CD(); // done
 
 } // namespace SunriseAlarm
 

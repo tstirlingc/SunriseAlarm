@@ -3,6 +3,7 @@
 // Prototype in bedroom 2013-03-26
 // 2x 2N3904 transistors connected to pin3 through 2x 10kOhm resistors
 // These transistors are connected to 4x white LEDs through 100Ohm resistors to 5V.
+#include <avr/pgmspace.h>
 #include "TimerOne.h"
 #include <Wire.h>
 #include "Adafruit_LEDBackpack.h"
@@ -29,6 +30,14 @@
 #define NEOPIXEL_PIN 6
 
 #define NUM_LED 32
+#define SNOOZE_MINUTES 5
+#define ALARM_DELTA 30 // 30 minutes before and after alarmTime
+#define ALARM_DELTA_MILLIS 1800000 // 30 minutes in milliseconds
+#define MODE_INACTIVE_PERIOD_MILLIS 30000 // 30 seconds
+#define ALARM_ADDRESS 4
+#define SUNSET_DIM_ADDRESS 8
+
+#define DEBUG 1
 
 namespace SunriseAlarm {
 // Declarations
@@ -47,34 +56,29 @@ void updateAlarmLight();
 void updateAlarm(int16_t delta);
 bool writeSunsetDimToEEPROM();
 void updateTime(ClockTime & t, int16_t delta);
-void updateStartTime();
+void updateAlarmStartEndTime();
 bool writeAlarmTimeToEEPROM();
-int32_t secondsBtwDates(ClockTime currentTime, ClockTime alarm);
 void updateSunsetLight();
 
 // Globals
 bool alarmMasterSwitchEnabled = true;
-bool alarmEnabled = true;
-bool snoozeActive = false;
 int matrixBrightness = 0;
 // This is the time you want to get up.  Lights will start 30 minutes before.
-ClockTime alarmTime(6, 00);
-ClockTime startTime(5, 30);
-bool soundAlarmAPlaying = false;
+ClockTime alarmTime     (6, 00);
+ClockTime alarmStartTime(5, 30);
+ClockTime alarmEndTime  (6, 30);
 Adafruit_7segment matrix = Adafruit_7segment();
 ClickEncoder *encoder;
-const uint32_t modeInactivePeriod = 30000; // 30 seconds
 RTC_DS3231 RTC;
 ClockTime synchronized_clock_time;
 uint32_t synchronized_clock_millis;
 ClockTime current_clock_time;
 uint32_t millisAtStartOfSunset = 0;
-int defaultSunsetDelta = 10; // minutes
+uint32_t sunsetDeltaInMilliseconds = 600000; // 10 minutes in milliseconds
 int sunsetDimLevel = 100; // 100 = max bright, 0 = off
-const int16_t oneHourInSeconds = 3600;
-const int16_t fiveMinutesInSeconds = 300;
-const int16_t thirtyMinutesInSeconds = 1800; // 1800 seconds = 30 minutes
 ClockTime snoozeStartTime;
+ClockTime snoozeEndTime;
+
 uint32_t alarmStartMillis = 0;
 
 } // namespace SunriseAlarm 
@@ -113,18 +117,9 @@ bool soundAlarmBPlaying = false;
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LED, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 
-const int16_t maxBright = 1024; // resolution of TimerOne::pwm (10 bits)
-const int thirtyMinutes = 30;
-const int forward_delay = 15;
-const int rewind_delay = 150;
-const uint32_t millisecondsIn30Minutes = 1800000;
 
 AT24Cxx eeprom;
 
-const int alarm_address = 4;
-const int sunset_address = 6;
-const int brightness_address = 7;
-const int sunset_dim_address = 8;
 
 
 // seven segment display:
@@ -166,7 +161,7 @@ void timerIsr() {
 bool readAlarmTimeFromEEPROM() {
   if (eeprom.isPresent()) {
     char buf[2];
-    eeprom.ReadMem(alarm_address, buf, 2);
+    eeprom.ReadMem(ALARM_ADDRESS, buf, 2);
     alarmTime.hour = static_cast<int>(buf[0]);
     alarmTime.minute = static_cast<int>(buf[1]);
     return true;
@@ -179,57 +174,16 @@ bool writeAlarmTimeToEEPROM() {
     char myBuf[2];
     myBuf[0] = static_cast<char>(alarmTime.hour);
     myBuf[1] = static_cast<char>(alarmTime.minute);
-    eeprom.WriteMem(alarm_address, myBuf, 2);
+    eeprom.WriteMem(ALARM_ADDRESS, myBuf, 2);
     return true;
   }
   return false;
 }
 
-//bool readBrightnessFromEEPROM() {
-//  if (eeprom.isPresent()) {
-//    char buf[1];
-//    eeprom.ReadMem(brightness_address, buf, 1);
-//    matrixBrightness = static_cast<int>(buf[0]);
-//    return true;
-//  }
-//  return false;
-//}
-
-//bool writeBrightnessToEEPROM() {
-//  if (eeprom.isPresent()) {
-//    char myBuf[1];
-//    myBuf[0] = static_cast<char>(matrixBrightness);
-//    eeprom.WriteMem(brightness_address, myBuf, 1);
-//    return true;
-//  }
-//  return false;
-//}
-
-
-//bool readSunsetDeltaFromEEPROM() {
-//  if (eeprom.isPresent()) {
-//    char buf[1];
-//    eeprom.ReadMem(sunset_address, buf, 1);
-//    defaultSunsetDelta = static_cast<int>(buf[0]);
-//    return true;
-//  }
-//  return false;
-//}
-
-//bool writeSunsetDeltaToEEPROM() {
-//  if (eeprom.isPresent()) {
-//    char myBuf[1];
-//    myBuf[0] = static_cast<char>(defaultSunsetDelta);
-//    eeprom.WriteMem(sunset_address, myBuf, 1);
-//    return true;
-//  }
-//  return false;
-//}
-
 bool readSunsetDimFromEEPROM() {
   if (eeprom.isPresent()) {
     char buf[1];
-    eeprom.ReadMem(sunset_dim_address, buf, 1);
+    eeprom.ReadMem(SUNSET_DIM_ADDRESS, buf, 1);
     sunsetDimLevel = static_cast<int>(buf[0]);
     return true;
   }
@@ -240,7 +194,7 @@ bool writeSunsetDimToEEPROM() {
   if (eeprom.isPresent()) {
     char myBuf[1];
     myBuf[0] = static_cast<char>(sunsetDimLevel);
-    eeprom.WriteMem(sunset_dim_address, myBuf, 1);
+    eeprom.WriteMem(SUNSET_DIM_ADDRESS, myBuf, 1);
     return true;
   }
   return false;
@@ -279,7 +233,7 @@ void linearBrightOfStep(uint16_t step)
 
 uint32_t linearBrightOfMilliseconds(uint32_t milliseconds)
 {
-  uint16_t stepNumber = (totalDimmerSteps * milliseconds) / millisecondsIn30Minutes;
+  uint16_t stepNumber = (totalDimmerSteps * milliseconds) / ALARM_DELTA_MILLIS;
   linearBrightOfStep(stepNumber);
 }
 
@@ -296,12 +250,12 @@ void logisticBrightOfStep(uint16_t step)
 
 void logisticBrightOfMilliseconds(uint32_t milliseconds)
 {
-  uint32_t stepNumber = ((uint32_t)(totalDimmerSteps) * milliseconds) / millisecondsIn30Minutes;
+  uint32_t stepNumber = ((uint32_t)(totalDimmerSteps) * milliseconds) / ALARM_DELTA_MILLIS;
   logisticBrightOfStep(stepNumber);
 }
 
 void turnLightOn() {
-  int16_t delta = max(1, totalDimmerSteps / 500);
+  int16_t delta = max(1, totalDimmerSteps / 250);
   for (int16_t i = currentDimmerStep; i < totalDimmerSteps; i += delta) {
     linearBrightOfStep(i);
     delay(1);
@@ -310,7 +264,7 @@ void turnLightOn() {
 }
 
 void turnLightOff() {
-  int16_t delta = max(1, totalDimmerSteps / 500);
+  int16_t delta = max(1, totalDimmerSteps / 250);
   for (int16_t i = currentDimmerStep; i > 0 ; i -= delta) {
     linearBrightOfStep(i);
     delay(1);
@@ -387,9 +341,11 @@ void updateTimeFromRTC24HoursAfterLastTime() {
   }
 }
 
-void updateStartTime() {
-  startTime = alarmTime;
-  startTime -= thirtyMinutes;
+void updateAlarmStartEndTime() {
+  alarmStartTime = alarmTime;
+  alarmStartTime -= ALARM_DELTA;
+  alarmEndTime = alarmTime;
+  alarmEndTime += ALARM_DELTA;
 }
 
 
@@ -435,6 +391,9 @@ void display_sfc() {
 }
 
 void setup() {
+#ifdef DEBUG
+  Serial.begin(9600);
+#endif
   Wire.begin();
   RTC.begin();
   pinMode(AlarmButton, INPUT_PULLUP);
@@ -471,27 +430,17 @@ void setup() {
   updateTimeFromRTCNow();
   updateClockDisplayNow();
   readAlarmTimeFromEEPROM();
-  updateStartTime();
-}
-
-int32_t secondsBtwDates(ClockTime currentTime, ClockTime alarm) {
-  int32_t s = (currentTime.hour - alarm.hour);
-  s *= 3600;
-  s += (currentTime.minute - alarm.minute) * 60;
-  s += (currentTime.second - alarm.second);
-  return ( s );
+  updateAlarmStartEndTime();
 }
 
 void alarmAMusicOn()
 {
-  digitalWrite(soundAPin, LOW);
-  soundAlarmAPlaying = true;
+  //digitalWrite(soundAPin, LOW);
 }
 
 void alarmAMusicOff()
 {
-  digitalWrite(soundAPin, HIGH);
-  soundAlarmAPlaying = false;
+  //digitalWrite(soundAPin, HIGH);
 }
 
 void alarmBMusicOn()
@@ -535,14 +484,12 @@ void updateSunsetLight() {
   }
   uint32_t currentMillis = millis();
   uint32_t delta = static_cast<uint32_t>(currentMillis - millisAtStartOfSunset);
-  uint32_t finalMillis = defaultSunsetDelta;
-  finalMillis *= 60;
-  finalMillis *= 1000;
-  uint32_t temp = totalDimmerSteps - totalDimmerSteps * delta / finalMillis;
+  uint32_t temp = totalDimmerSteps - totalDimmerSteps * delta / sunsetDeltaInMilliseconds;
   logisticBrightOfStep(temp);
 }
 
 void loop() {
+  turnLightOff();
   stateCE();
 }
 
