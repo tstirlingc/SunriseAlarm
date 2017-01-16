@@ -14,7 +14,7 @@ void alarmButtonLEDOff() {
 }
 
 void timeButtonLEDOn() {
-  analogWrite(TimeLED, 10);
+  analogWrite(TimeLED, 40);
 }
 
 void timeButtonLEDOff() {

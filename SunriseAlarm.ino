@@ -37,6 +37,8 @@
 #define MODE_INACTIVE_PERIOD_MILLIS 30000 // 30 seconds
 #define ALARM_ADDRESS 4
 #define SUNSET_DIM_ADDRESS 8
+#define UPDATE_FROM_RTC_INTERVAL 3600000 // update from RTC every hour (in milliseconds)
+#define CLOCK_DISPLAY_UPDATE_INTERVAL 1000 // update clock display every second
 
 #define DEBUG 1
 
@@ -312,17 +314,14 @@ bool isTimeNow(uint32_t & last, unsigned wait) {
 void updateClockDisplayNow() {
   current_clock_time = synchronized_clock_time;
   const uint32_t seconds_delta = millis_delta(synchronized_clock_millis, millis()) / 1000;
-  const uint32_t minutes_delta = seconds_delta / 60;
-  current_clock_time.minute += minutes_delta;
-  current_clock_time.second += (seconds_delta - minutes_delta * 60);
+  current_clock_time.second += seconds_delta;
   current_clock_time.fixTime();
   updateTimeDisplay(current_clock_time, false, alarmMasterSwitchEnabled);
 }
 
-const uint32_t updateInterval = 1000; // every second
 uint32_t lastUpdate = millis();
 void updateClockDisplayOneSecondAfterLastTime() {
-  if (isTimeNow(lastUpdate, updateInterval)) {
+  if (isTimeNow(lastUpdate, CLOCK_DISPLAY_UPDATE_INTERVAL)) {
     updateClockDisplayNow();
   }
 }
@@ -334,10 +333,9 @@ void updateTimeFromRTCNow() {
   current_clock_time = synchronized_clock_time;
 }
 
-const uint32_t clockUpdateInterval = 24 * 60 * 60 * 1000; // every 24 hours
 uint32_t lastClockUpdate = millis();
 void updateTimeFromRTC24HoursAfterLastTime() {
-  if (isTimeNow(lastClockUpdate, clockUpdateInterval)) {
+  if (isTimeNow(lastClockUpdate, UPDATE_FROM_RTC_INTERVAL)) {
     updateTimeFromRTCNow();
   }
 }
