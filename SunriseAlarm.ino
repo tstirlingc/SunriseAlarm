@@ -115,8 +115,6 @@ uint32_t alarmStartMillis = 0;
 
 namespace SunriseAlarm {
 
-bool soundAlarmBPlaying = false;
-
 Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LED, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
 
 
@@ -434,24 +432,22 @@ void setup() {
 
 void alarmAMusicOn()
 {
-  //digitalWrite(soundAPin, LOW);
+  digitalWrite(soundAPin, LOW);
 }
 
 void alarmAMusicOff()
 {
-  //digitalWrite(soundAPin, HIGH);
+  digitalWrite(soundAPin, HIGH);
 }
 
 void alarmBMusicOn()
 {
   digitalWrite(soundBPin, LOW);
-  soundAlarmBPlaying = true;
 }
 
 void alarmBMusicOff()
 {
   digitalWrite(soundBPin, HIGH);
-  soundAlarmBPlaying = false;
 }
 
 const unsigned lightUpdateInterval = 50;
