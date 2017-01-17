@@ -77,6 +77,8 @@ namespace SunriseAlarm {
 //      TimeButton -> TE
 //      RotaryButton -> SE
 
+void changeState_Init_CE();
+
 void stateCE();           // done
 void changeState_CE_CD(); // done
 void changeState_CE_AE(); // done

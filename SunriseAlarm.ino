@@ -40,7 +40,7 @@
 #define UPDATE_FROM_RTC_INTERVAL 3600000 // update from RTC every hour (in milliseconds)
 #define CLOCK_DISPLAY_UPDATE_INTERVAL 1000 // update clock display every second
 
-#define DEBUG 1
+//#define DEBUG 1
 
 namespace SunriseAlarm {
 // Declarations
@@ -50,8 +50,6 @@ void updateTimeFromRTCNow();
 void updateTimeFromRTC24HoursAfterLastTime();
 void turnLightOn();
 void turnLightOff();
-void alarmAMusicOn();
-void alarmAMusicOff();
 void display_Cloc();
 void display_ALAr();
 void updateTimeDisplay(ClockTime t, bool military, bool dots);
@@ -62,6 +60,7 @@ void updateTime(ClockTime & t, int16_t delta);
 void updateAlarmStartEndTime();
 bool writeAlarmTimeToEEPROM();
 void updateSunsetLight();
+bool isTimeNow(uint32_t & last, unsigned wait);
 
 // Globals
 bool alarmMasterSwitchEnabled = true;
@@ -81,83 +80,23 @@ uint32_t sunsetDeltaInMilliseconds = 600000; // 10 minutes in milliseconds
 int sunsetDimLevel = 100; // 100 = max bright, 0 = off
 ClockTime snoozeStartTime;
 ClockTime snoozeEndTime;
-
+Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LED, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
+AT24Cxx eeprom;
 uint32_t alarmStartMillis = 0;
 
 } // namespace SunriseAlarm 
 
 #include "LightColor.h"
 #include "Inputs.hpp"
+#include "Outputs.hpp"
 #include "ClockStates_decl.hpp"
 #include "ClockStates_def.hpp"
 
-// 2013-04-06 TODO:  Add a temperature sensor to the lamp and if it exceeds a particular temperature, then turn it off or down
-// 2013-04-06 TODO:  Add three LEDs inside the enclosure to indicate which mode you are in.  E.g. green for alarm, blue for time, and red for sundown.
-// 2013-04-06 DONE 2013-04-06:  Store Sunset alarm setting in EEPROM
-// 2013-04-06 DONE 2013-04-06:  Store brigness level in EEPROM
-// 2013-04-06 DONE 2013-04-06:  Change Alarm, Time, and Sundown modes so they will automatically exit the mode after 60 seconds of inactivity.
-// 2013-04-01 TODO:  Box enclosure:  Consider a OLED display behind a thin veneer of wood or paper so that the display can print
-//                   the numbers in a particular font, e.g. the old Russian Nixie tube font, or a Victorian font.
-//                   Also:  Change all the switches to flip switches or knobs for a more retro feel.
-//                   Make sure each of the switches & knobs feels different so you can find them in the dark.
-//                   Alternative to the OLED display:  Invest in nixie tubes
-// 2013-04-01 TODO:  Change "OffButton" to allow you to see how much time is left and reset it
-// 2013-04-01 TODO:  Rework SunRISE alarm to match the way the SunSET alarm works.  Basically, use millis() instead of clock
-// DONE 2013-03-29:  Add alarm & time mode so you don't have to hold down the buttons.
-// DONE 2013-03-30:  Add Sunset mode
-// WONTFIX 2013-03-29:  Add AM/PM indicator
-// DONE 2013-03-29:  Add method to toggle alarm on/off
-// DONE 2013-03-28:  Add hardware buttons for setting time and alarm
-// TODO:  Add audio:  chirping birds at alarm time
-// TODO:  Add snooze button to delay chirping for 7 minutes or so
-// DONE 2013-04-17:  Change light alarm so it is based on millis() rather than RTC
-// TODO:  Get light updated more often, especially in third slope of alarm.
-
 namespace SunriseAlarm {
-
-Adafruit_NeoPixel strip = Adafruit_NeoPixel(NUM_LED, NEOPIXEL_PIN, NEO_GRB + NEO_KHZ800);
-
-
-
-AT24Cxx eeprom;
-
-
-
-// seven segment display:
-//      A
-//    -----
-//   |     |
-// F |     | B
-//   |  G  |
-//    -----
-//   |     |
-// E |     | C
-//   |     |
-//    -----
-//      D   o P
-// Turn on bits using B notation:
-// BPGFEDCBA
-// E.g. to turn on a capital C letter without the dot, use:
-// B00111001
-
-uint8_t raw_C = B00111001;
-uint8_t raw_l = B00110000;
-uint8_t raw_o = B01011100;
-uint8_t raw_c = B01011000;
-uint8_t raw_A = B01110111;
-uint8_t raw_L = B00111000;
-uint8_t raw_r = B01010000;
-uint8_t raw_t = B01111000;
-uint8_t raw_d = B01011110;
-uint8_t dot_bit = B10000000;
-uint8_t raw_S = B01101101;
-uint8_t raw_F = B01110001;
-
 
 void timerIsr() {
   encoder->service();
 }
-
 
 bool readAlarmTimeFromEEPROM() {
   if (eeprom.isPresent()) {
@@ -202,102 +141,6 @@ bool writeSunsetDimToEEPROM() {
 }
 
 
-
-uint16_t currentDimmerStep = 0;
-uint8_t baseRGBColor[3] = {0u, 0u, 0u};
-uint8_t highRGBColor[3] = {0u, 0u, 0u};
-
-// step range from 0 to minRGBLevel*NUM_LED
-void linearBrightOfStep(uint16_t step)
-{
-  currentDimmerStep = step;
-  uint16_t levelForAllLEDs = step / NUM_LED;
-  uint8_t numLEDsAtHigherLevel = step % NUM_LED;
-  for (uint8_t i = 0 ; i < 3 ; ++i)
-  {
-    baseRGBColor[i] = (targetColor[i] * levelForAllLEDs) / minRGBLevel;
-    highRGBColor[i] = (targetColor[i] * (levelForAllLEDs + 1)) / minRGBLevel;
-  }
-  for (uint8_t i = 0 ; i < NUM_LED ; ++i)
-  {
-    if (i < numLEDsAtHigherLevel)
-    {
-      strip.setPixelColor(i, highRGBColor[0], highRGBColor[1], highRGBColor[2]);
-    }
-    else
-    {
-      strip.setPixelColor(i, baseRGBColor[0], baseRGBColor[1], baseRGBColor[2]);
-    }
-  }
-  strip.show();
-}
-
-uint32_t linearBrightOfMilliseconds(uint32_t milliseconds)
-{
-  uint16_t stepNumber = (totalDimmerSteps * milliseconds) / ALARM_DELTA_MILLIS;
-  linearBrightOfStep(stepNumber);
-}
-
-void logisticBrightOfStep(uint16_t step)
-{
-  float p = ((float)step) / ((float)totalDimmerSteps);
-  float L = 1.0;
-  float k = 20.0;
-  float x0 = 0.5;
-  float logisticP = L / (1 + exp(-k * (p - x0)));
-  uint16_t logisticStep = logisticP * totalDimmerSteps;
-  linearBrightOfStep(logisticStep);
-}
-
-void logisticBrightOfMilliseconds(uint32_t milliseconds)
-{
-  uint32_t stepNumber = ((uint32_t)(totalDimmerSteps) * milliseconds) / ALARM_DELTA_MILLIS;
-  logisticBrightOfStep(stepNumber);
-}
-
-void turnLightOn() {
-  int16_t delta = max(1, totalDimmerSteps / 250);
-  for (int16_t i = currentDimmerStep; i < totalDimmerSteps; i += delta) {
-    linearBrightOfStep(i);
-    delay(1);
-  }
-  linearBrightOfStep(totalDimmerSteps);
-}
-
-void turnLightOff() {
-  int16_t delta = max(1, totalDimmerSteps / 250);
-  for (int16_t i = currentDimmerStep; i > 0 ; i -= delta) {
-    linearBrightOfStep(i);
-    delay(1);
-  }
-  linearBrightOfStep(0u);
-}
-
-
-// DONE:  Update to display 12 hr time
-void updateTimeDisplay(ClockTime t, bool military, bool dots) {
-  matrix.print(0);
-  int hour = t.hour;
-  if (!military) {
-    hour = (t.hour > 12) ? t.hour - 12 : t.hour ;
-    if (hour == 0) {
-      hour += 12;
-    }
-  }
-  int digit0 = hour / 10;
-  int digit1 = hour % 10;
-  int digit3 = t.minute / 10;
-  int digit4 = t.minute % 10;
-  if (digit0 > 0) {
-    matrix.writeDigitNum(0, digit0, dots);
-  }
-  matrix.writeDigitNum(1, digit1, dots);
-  matrix.writeDigitNum(2, 1); // colon
-  matrix.writeDigitNum(3, digit3, dots);
-  matrix.writeDigitNum(4, digit4, dots);
-  matrix.writeDisplay();
-}
-
 // wait is in milliseconds
 // last is the last time this function returned true
 bool isTimeNow(uint32_t & last, unsigned wait) {
@@ -307,21 +150,6 @@ bool isTimeNow(uint32_t & last, unsigned wait) {
     return true;
   }
   return false;
-}
-
-void updateClockDisplayNow() {
-  current_clock_time = synchronized_clock_time;
-  const uint32_t seconds_delta = millis_delta(synchronized_clock_millis, millis()) / 1000;
-  current_clock_time.second += seconds_delta;
-  current_clock_time.fixTime();
-  updateTimeDisplay(current_clock_time, false, alarmMasterSwitchEnabled);
-}
-
-uint32_t lastUpdate = millis();
-void updateClockDisplayOneSecondAfterLastTime() {
-  if (isTimeNow(lastUpdate, CLOCK_DISPLAY_UPDATE_INTERVAL)) {
-    updateClockDisplayNow();
-  }
 }
 
 void updateTimeFromRTCNow() {
@@ -336,55 +164,6 @@ void updateTimeFromRTC24HoursAfterLastTime() {
   if (isTimeNow(lastClockUpdate, UPDATE_FROM_RTC_INTERVAL)) {
     updateTimeFromRTCNow();
   }
-}
-
-void updateAlarmStartEndTime() {
-  alarmStartTime = alarmTime;
-  alarmStartTime -= ALARM_DELTA;
-  alarmEndTime = alarmTime;
-  alarmEndTime += ALARM_DELTA;
-}
-
-
-void display_Cloc() {
-  matrix.clear();
-  matrix.writeDigitRaw(0, raw_C | dot_bit);
-  matrix.writeDigitRaw(1, raw_l | dot_bit);
-  matrix.writeDigitRaw(3, raw_o | dot_bit);
-  matrix.writeDigitRaw(4, raw_c | dot_bit);
-  matrix.writeDisplay();
-}
-
-
-
-void display_ALAr() {
-  matrix.clear();
-  matrix.writeDigitRaw(0, raw_A | dot_bit);
-  matrix.writeDigitRaw(1, raw_L | dot_bit);
-  matrix.writeDigitRaw(3, raw_A | dot_bit);
-  matrix.writeDigitRaw(4, raw_r | dot_bit);
-  matrix.writeDisplay();
-}
-
-void display_todd() {
-  matrix.setBrightness(15);
-  matrix.clear();
-  matrix.writeDigitRaw(0, raw_t);  
-  matrix.writeDigitRaw(1, raw_o);
-  matrix.writeDigitRaw(3, raw_d);
-  matrix.writeDigitRaw(4, raw_d);
-  matrix.writeDisplay();
-  delay(5000);
-}
-
-void display_sfc() {
-  matrix.setBrightness(15);
-  matrix.clear();
-  matrix.writeDigitRaw(1, raw_S);
-  matrix.writeDigitRaw(3, raw_F);
-  matrix.writeDigitRaw(4, raw_C);
-  matrix.writeDisplay();
-  delay(5000);  
 }
 
 void setup() {
@@ -430,61 +209,8 @@ void setup() {
   updateAlarmStartEndTime();
 }
 
-void alarmAMusicOn()
-{
-  digitalWrite(soundAPin, LOW);
-}
-
-void alarmAMusicOff()
-{
-  digitalWrite(soundAPin, HIGH);
-}
-
-void alarmBMusicOn()
-{
-  digitalWrite(soundBPin, LOW);
-}
-
-void alarmBMusicOff()
-{
-  digitalWrite(soundBPin, HIGH);
-}
-
-const unsigned lightUpdateInterval = 50;
-uint32_t lastLightUpdate = millis();
-void updateAlarmLight() {
-  if (!isTimeNow(lastLightUpdate, lightUpdateInterval)) {
-    return;
-  }
-  uint32_t debug_millis = millis_delta(alarmStartMillis, millis());
-  logisticBrightOfMilliseconds(debug_millis);
-}
-
-
-void updateTime(ClockTime & t, int16_t delta) {
-  t += delta;
-  updateTimeDisplay(t, true, alarmMasterSwitchEnabled);
-}
-
-void updateAlarm(int16_t delta) {
-  alarmTime += delta;
-  updateTimeDisplay(alarmTime, true, alarmMasterSwitchEnabled);
-}
-
-uint32_t lastSunsetUpdate = millis();
-unsigned sunsetUpdateInterval = 5;
-void updateSunsetLight() {
-  if (!isTimeNow(lastSunsetUpdate, sunsetUpdateInterval)) {
-    return;
-  }
-  uint32_t delta = millis_delta(millisAtStartOfSunset, millis());
-  uint32_t temp = totalDimmerSteps - totalDimmerSteps * delta / sunsetDeltaInMilliseconds;
-  logisticBrightOfStep(temp);
-}
-
 void loop() {
-  turnLightOff();
-  stateCE();
+  changeState_Init_CE();
 }
 
 } // namespace SunriseAlarm

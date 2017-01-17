@@ -18,10 +18,10 @@ const uint8_t candleLight[3] = {255, 147, 41};
 const uint8_t sunLight[3] = {255, 255, 255};
 const uint8_t tungsten100W[3] = {255, 214, 170}; 
 const uint8_t halogen[3] = {255, 241, 224};
-const uint8_t kitchen[3] = {255, 241, 110};
+const uint8_t kitchen[3] = {255, 241, 50};
 const uint8_t testingLight[3] = {50, 0, 0};
 uint8_t targetColor[3] = {255, 0, 0};
-const uint8_t sunriseDimLevel = 95; // Percentage of max [0, 100]
+const uint8_t sunriseDimLevel = 100; // Percentage of max [0, 100]
 
 uint8_t minRGBLevel = computeMinRGBLevel(targetColor);
 uint16_t totalDimmerSteps = minRGBLevel * NUM_LED;

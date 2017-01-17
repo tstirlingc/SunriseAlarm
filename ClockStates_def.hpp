@@ -5,20 +5,19 @@
 
 namespace SunriseAlarm {
 
-void alarmButtonLEDOn() {
-  analogWrite(AlarmLED, 1);
-}
 
-void alarmButtonLEDOff() {
-  analogWrite(AlarmLED, 0);
-}
 
-void timeButtonLEDOn() {
-  analogWrite(TimeLED, 40);
-}
-
-void timeButtonLEDOff() {
-  analogWrite(TimeLED, 0);
+void changeState_Init_CE() {
+  alarmButtonLEDOff();
+  timeButtonLEDOff();
+  
+  alarmAMusicOff();
+  alarmBMusicOff();
+  
+  turnLightOff();
+  
+  updateClockDisplayNow();
+  stateCE();
 }
 
 bool timeInAlarmWindow() { 
@@ -184,6 +183,11 @@ void changeState_CD_SD()
   stateSD();
 }
 
+void updateAlarm(int16_t delta) {
+  alarmTime += delta;
+  updateTimeDisplay(alarmTime, true, alarmMasterSwitchEnabled);
+}
+
 void stateAImpl()
 {
   uint32_t modeActive = millis();
@@ -328,6 +332,12 @@ void changeState_TD_CD()
   stateCD();
 }
 
+
+void updateTime(ClockTime & t, int16_t delta) {
+  t += delta;
+  updateTimeDisplay(t, true, alarmMasterSwitchEnabled);
+}
+
 void stateTImpl() {
   DateTime currentTime = RTC.now();
   ClockTime t(currentTime.hour(), currentTime.minute(), currentTime.second());
@@ -380,6 +390,13 @@ void stateTD() {
   changeState_TD_CD();
 }
 
+void updateAlarmStartEndTime() {
+  alarmStartTime = alarmTime;
+  alarmStartTime -= ALARM_DELTA;
+  alarmEndTime = alarmTime;
+  alarmEndTime += ALARM_DELTA;
+}
+
 void changeState_A_C_Impl()
 {
   updateAlarmStartEndTime();
@@ -406,6 +423,16 @@ void changeState_AD_CD()
 #endif
   changeState_A_C_Impl();
   stateCD();
+}
+
+const unsigned lightUpdateInterval = 50;
+uint32_t lastLightUpdate = millis();
+void updateAlarmLight() {
+  if (!isTimeNow(lastLightUpdate, lightUpdateInterval)) {
+    return;
+  }
+  uint32_t debug_millis = millis_delta(alarmStartMillis, millis());
+  logisticBrightOfMilliseconds(debug_millis);
 }
 
 void stateCEA() {
@@ -645,6 +672,19 @@ void changeState_CEAMS_CEAM() {
 #endif
   alarmAMusicOn();
   stateCEAM();
+}
+
+
+
+uint32_t lastSunsetUpdate = millis();
+unsigned sunsetUpdateInterval = 5;
+void updateSunsetLight() {
+  if (!isTimeNow(lastSunsetUpdate, sunsetUpdateInterval)) {
+    return;
+  }
+  uint32_t delta = millis_delta(millisAtStartOfSunset, millis());
+  uint32_t temp = totalDimmerSteps - totalDimmerSteps * delta / sunsetDeltaInMilliseconds;
+  logisticBrightOfStep(temp);
 }
 
 void stateCES() {
