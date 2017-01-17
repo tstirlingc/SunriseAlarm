@@ -2,6 +2,7 @@
 #define CLOCK_STATES_DEF_HPP
 
 #include "ClockStates_decl.hpp"
+#include "EasterEgg.hpp"
 
 namespace SunriseAlarm {
 
@@ -39,6 +40,8 @@ bool timeForSunsetToBeFinished() {
   return false;
 }
 
+
+
 void stateCE() {
 #ifdef DEBUG
   Serial.println(F("stateCE"));
@@ -49,6 +52,7 @@ void stateCE() {
     if (timeButtonPushed()) changeState_CE_TE();
     if (rotaryButtonPushed()) changeState_CE_SE();
     if (timeInAlarmWindow()) changeState_CE_CEA(); 
+    if (SunriseAlarmEasterEgg::easterEggEntered()) changeState_CE_EE();
     updateTimeFromRTC24HoursAfterLastTime();
     updateClockDisplayOneSecondAfterLastTime();
   }
@@ -872,6 +876,35 @@ void changeState_CEOff_CD() {
   stateCD();
 }
 
+
+void stateEE() {
+  while (1) {
+    if (touchSensorTouched()) changeState_EE_CE();
+    if (SunriseAlarmEasterEgg::isTimeToEndEasterEgg()) changeState_EE_CE();
+    SunriseAlarmEasterEgg::crossFadeToRandomColor();
+    SunriseAlarmEasterEgg::adjustBrightness();
+    updateTimeFromRTC24HoursAfterLastTime();
+    updateClockDisplayOneSecondAfterLastTime();
+  }
+}
+
+void changeState_CE_EE() {
+  alarmButtonLEDOn();
+  timeButtonLEDOn();
+  waitForTouchSensorDepress();
+  SunriseAlarmEasterEgg::crossFadeSetup();
+  SunriseAlarmEasterEgg::easterEggStartTime = current_clock_time;
+  SunriseAlarmEasterEgg::easterEggEndTime = SunriseAlarmEasterEgg::easterEggStartTime + EASTER_EGG_MINUTES;
+  stateEE();
+}
+
+void changeState_EE_CE() {
+  alarmButtonLEDOff();
+  timeButtonLEDOff();
+  turnLightOff();
+  waitForTouchSensorDepress();
+  stateCE();
+}
 
 } // namespace SunriseAlarm
 

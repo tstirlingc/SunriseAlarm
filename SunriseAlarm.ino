@@ -207,6 +207,7 @@ void setup() {
   updateClockDisplayNow();
   readAlarmTimeFromEEPROM();
   updateAlarmStartEndTime();
+  randomSeed(analogRead(A6));
 }
 
 void loop() {

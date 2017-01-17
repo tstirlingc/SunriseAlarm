@@ -85,6 +85,7 @@ void changeState_CE_AE(); // done
 void changeState_CE_TE(); // done
 void changeState_CE_SE(); // done
 void changeState_CE_CEA(); // done
+void changeState_CE_EE();
 
 void stateCD();           // done
 void changeState_CD_CE(); // done
@@ -160,6 +161,9 @@ void changeState_CEOff_TE(); // done
 void changeState_CEOff_AE(); // done
 void changeState_CEOff_SE(); // done
 void changeState_CEOff_CD(); // done
+
+void stateEE();
+void changeState_EE_CE();
 
 } // namespace SunriseAlarm
 
